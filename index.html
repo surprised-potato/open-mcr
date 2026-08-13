@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenMCR Web — Exam Optical Mark Recognition</title>
+  <meta name="description" content="Free, open-source and privacy-compliant client-side optical mark recognition (OMR) multiple choice exam grader.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Vendor scripts -->
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="vendor/pdf.min.js"></script>
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-group">
+        <span class="logo-badge">OpenMCR</span>
+        <h1 class="logo-title">Exam Bubble Reader</h1>
+        <span class="badge badge-slate" id="examVariantBadge">75 Questions</span>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs" role="tablist">
+        <button class="nav-tab-btn active" data-tab="setup" id="tabBtnSetup">⚙️ Setup</button>
+        <button class="nav-tab-btn" data-tab="keys" id="tabBtnKeys">🔑 Answer Keys</button>
+        <button class="nav-tab-btn" data-tab="scanner" id="tabBtnScanner">📄 Scanner</button>
+        <button class="nav-tab-btn" data-tab="inspector" id="tabBtnInspector">🔍 Inspector</button>
+        <button class="nav-tab-btn" data-tab="results" id="tabBtnResults">📊 Grade Roster</button>
+        <button class="nav-tab-btn" data-tab="analytics" id="tabBtnAnalytics">📈 Analytics</button>
+      </nav>
+
+      <div class="header-controls">
+        <button class="btn btn-sm" id="btnOpenFirebaseModal">
+          <span id="cloudStatusDot" style="width: 8px; height: 8px; border-radius: 50%; background-color: #94a3b8; display: inline-block;"></span>
+          <span id="cloudStatusText">Local Storage</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="main-container">
+
+    <!-- 1. EXAM SETUP PANE -->
+    <section class="tab-pane active" id="pane-setup">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Exam Configuration</h2>
+            <p class="card-subtitle">Set up exam metadata, form variant, and grading preferences</p>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="inputExamName">Exam Title</label>
+            <input type="text" id="inputExamName" class="form-input" placeholder="e.g. Midterm Exam 1" value="Physics 101 Midterm">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="selectFormVariant">Bubble Sheet Variant</label>
+            <select id="selectFormVariant" class="form-select">
+              <option value="75" selected>75 Questions (Standard with Student Name)</option>
+              <option value="150">150 Questions (Extended Variant)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="inputCourseId">Course ID (Optional)</label>
+            <input type="text" id="inputCourseId" class="form-input" placeholder="e.g. PHY2048">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Printable Sheet Templates</label>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+              <a href="assets/multiple_choice_sheet_75q.pdf" target="_blank" rel="noopener" class="btn btn-sm">📄 75Q PDF Sheet</a>
+              <a href="assets/multiple_choice_sheet_150q.pdf" target="_blank" rel="noopener" class="btn btn-sm">📄 150Q PDF Sheet</a>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+          <label class="form-label">Grading Rules</label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chkMultiAsF">
+            <span>Mark multiple answers on a single question as <strong>F</strong> (otherwise recorded as [A|B])</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chkEmptyAsG">
+            <span>Mark empty/unanswered questions as <strong>G</strong> (otherwise left blank)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chkSortByName" checked>
+            <span>Sort student grade roster alphabetically by Name (or ID)</span>
+          </label>
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+          <button class="btn btn-primary" id="btnProceedToKeys">Save & Proceed to Answer Keys →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. ANSWER KEYS PANE -->
+    <section class="tab-pane" id="pane-keys">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Answer Keys Manager</h2>
+            <p class="card-subtitle">Define correct answers for single or multiple form variants (Form A, B, C...)</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm" id="btnImportKeysCsv">📥 Import CSV</button>
+            <input type="file" id="fileImportKeysCsv" accept=".csv" style="display: none;">
+            <button class="btn btn-sm" id="btnExportKeysCsv">📤 Export CSV</button>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <label class="form-label" style="margin-bottom: 0;" for="selectKeyForm">Active Key Form:</label>
+            <select id="selectKeyForm" class="form-select" style="width: auto; min-width: 140px;">
+              <option value="*">Default Key (*)</option>
+              <option value="A">Form A</option>
+              <option value="B">Form B</option>
+              <option value="C">Form C</option>
+              <option value="D">Form D</option>
+            </select>
+          </div>
+
+          <div style="display: flex; gap: 0.4rem;">
+            <button class="btn btn-sm" id="btnQuickFillA">Fill All A</button>
+            <button class="btn btn-sm" id="btnQuickFillB">Fill All B</button>
+            <button class="btn btn-sm" id="btnQuickFillC">Fill All C</button>
+            <button class="btn btn-sm" id="btnClearActiveKey" style="color: var(--pastel-rose-text);">Clear Form</button>
+          </div>
+        </div>
+
+        <!-- Question Bubble Matrix -->
+        <div class="key-matrix-grid" id="keyMatrixContainer">
+          <!-- Populated dynamically by JS -->
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+          <span class="badge badge-sky" id="keyStatusSummary">75 / 75 Questions Answered</span>
+          <button class="btn btn-primary" id="btnProceedToScanner">Proceed to Scanner →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. SCANNER PANE -->
+    <section class="tab-pane" id="pane-scanner">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Batch Sheet Scanner</h2>
+            <p class="card-subtitle">Upload scanned bubble sheet images or multi-page PDFs for local processing</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-sm" id="btnLoadSampleScan">🧪 Load 1 Sample Scan</button>
+            <button class="btn btn-sm btn-primary" id="btnLoadBatchSample">🧪 Load Batch Demo (3 Sheets)</button>
+          </div>
+        </div>
+
+        <!-- Drag & Drop Dropzone -->
+        <div class="dropzone" id="scannerDropzone">
+          <input type="file" id="fileScanInput" multiple accept="image/*,.pdf" style="display: none;">
+          <div class="dropzone-icon">📥</div>
+          <p class="dropzone-text">Click to choose or drag & drop scan files here</p>
+          <p class="dropzone-hint">Supports PNG, JPG, JPEG, and multi-page PDF files • 100% processed locally on your machine</p>
+        </div>
+
+        <!-- Scanning Progress -->
+        <div class="progress-container" id="scannerProgressContainer">
+          <div class="progress-header">
+            <span id="scannerProgressLabel">Processing scans...</span>
+            <span id="scannerProgressPercent">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="scannerProgressFill"></div>
+          </div>
+        </div>
+
+        <!-- Scanned Batch Queue -->
+        <div style="margin-top: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <h3 style="font-size: 0.95rem; font-weight: 600;">Processed Batch Queue (<span id="batchCount">0</span>)</h3>
+            <button class="btn btn-sm" id="btnClearBatch" style="color: var(--pastel-rose-text);">Clear All</button>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table" id="scansTable">
+              <thead>
+                <tr>
+                  <th>File Name</th>
+                  <th>Student ID</th>
+                  <th>Student Name</th>
+                  <th>Form</th>
+                  <th>Score</th>
+                  <th>Points</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="scansTableBody">
+                <tr>
+                  <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">No sheets scanned yet. Drop images or PDFs above to begin.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. VISUAL SHEET INSPECTOR PANE -->
+    <section class="tab-pane" id="pane-inspector">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Visual Sheet Inspector</h2>
+            <p class="card-subtitle">Inspect detected alignment corners, bubble fill levels, and scored answers</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <select id="selectInspectSubmission" class="form-select" style="min-width: 200px;">
+              <option value="">Select a scanned sheet...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="inspector-layout">
+          <!-- Canvas Viewer -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <div style="display: flex; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+                <label><input type="checkbox" id="chkLayerFiducials" checked> Fiducials</label>
+                <label><input type="checkbox" id="chkLayerBubbles" checked> Bubble Overlays</label>
+                <label><input type="checkbox" id="chkLayerLabels" checked> Answer Key Rings</label>
+              </div>
+              <div style="display: flex; gap: 0.3rem;">
+                <button class="btn btn-sm" id="btnZoomIn">➕</button>
+                <button class="btn btn-sm" id="btnZoomOut">➖</button>
+                <button class="btn btn-sm" id="btnZoomReset">Reset</button>
+              </div>
+            </div>
+
+            <div class="canvas-wrapper" id="canvasWrapper">
+              <canvas id="inspectorCanvas"></canvas>
+            </div>
+          </div>
+
+          <!-- Inspector Sidebar Breakdown -->
+          <div class="inspector-sidebar">
+            <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);">
+              <h3 style="font-size: 1rem; font-weight: 700;" id="inspectStudentName">Select a Sheet</h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary);" id="inspectStudentDetails">ID: - • Form: -</p>
+              <div style="margin-top: 0.5rem;">
+                <span class="badge badge-mint" id="inspectScoreBadge">Score: -</span>
+                <span class="badge badge-slate" id="inspectThresholdBadge">Threshold: -</span>
+              </div>
+            </div>
+
+            <h4 style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">Question Breakdown</h4>
+            <div id="inspectorQuestionList">
+              <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 2rem;">No sheet selected.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. RESULTS & ROSTER PANE -->
+    <section class="tab-pane" id="pane-results">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Class Grade Roster</h2>
+            <p class="card-subtitle">Search, audit, and export graded student submissions</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-primary btn-sm" id="btnExportExcel">📊 Export to Excel (.xlsx)</button>
+            <button class="btn btn-sm" id="btnExportCsv">📄 Export CSV</button>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <input type="text" id="inputSearchRoster" class="form-input" placeholder="Search by Student ID or Name..." style="max-width: 300px;">
+          <span class="badge badge-slate" id="rosterCountBadge">0 Students</span>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="rosterTable">
+            <thead>
+              <tr>
+                <th>Student ID</th>
+                <th>Student Name</th>
+                <th>Form</th>
+                <th>Points</th>
+                <th>Score (%)</th>
+                <th>Threshold</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rosterTableBody">
+              <tr>
+                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No graded results to show.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. ANALYTICS PANE -->
+    <section class="tab-pane" id="pane-analytics">
+      <!-- Summary Metrics Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total Submissions</div>
+          <div class="stat-value" id="statCount">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Class Average</div>
+          <div class="stat-value" id="statAverage">0.0%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Median Score</div>
+          <div class="stat-value" id="statMedian">0.0%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Highest Score</div>
+          <div class="stat-value" id="statMax">0.0%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Lowest Score</div>
+          <div class="stat-value" id="statMin">0.0%</div>
+        </div>
+      </div>
+
+      <!-- Item Analysis Table -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Question Item Difficulty & Distractor Analysis</h2>
+            <p class="card-subtitle">Inspect % correct per question and option distribution to identify challenging test items</p>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="itemAnalysisTable">
+            <thead>
+              <tr>
+                <th>Question</th>
+                <th>Key</th>
+                <th>% Correct</th>
+                <th>Top 10%</th>
+                <th>Bottom 10%</th>
+                <th>Discrim. Index</th>
+                <th>Count A</th>
+                <th>Count B</th>
+                <th>Count C</th>
+                <th>Count D</th>
+                <th>Count E</th>
+                <th>Blank / Multi</th>
+              </tr>
+            </thead>
+            <tbody id="itemAnalysisTableBody">
+              <tr>
+                <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 2rem;">Scan exam sheets to generate item analysis.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Firebase Cloud Sync Modal -->
+  <div class="modal-backdrop" id="firebaseModal">
+    <div class="modal-dialog">
+      <div class="card-header" style="margin-bottom: 1rem;">
+        <h3 class="card-title">Cloud Storage Setup (Firebase Firestore)</h3>
+        <button class="btn btn-sm" id="btnCloseFirebaseModal">✕</button>
+      </div>
+      <p style="font-size: 0.825rem; color: var(--text-secondary); margin-bottom: 1rem;">
+        Connect your Google Firebase Firestore database to automatically sync answer keys, exam configurations, and student score rosters across devices. <em>(Exam scan pictures are NEVER uploaded and remain on your device).</em>
+      </p>
+
+      <div class="form-group">
+        <label class="form-label" for="fbApiKey">API Key</label>
+        <input type="text" id="fbApiKey" class="form-input" placeholder="AIzaSy...">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="fbProjectId">Project ID</label>
+        <input type="text" id="fbProjectId" class="form-input" placeholder="my-school-exam-project">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="fbAppId">App ID</label>
+        <input type="text" id="fbAppId" class="form-input" placeholder="1:123456789:web:abcdef">
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem;">
+        <button class="btn btn-sm" id="btnDisconnectFirebase" style="color: var(--pastel-rose-text);">Disconnect</button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-subtle" id="btnSyncCloudNow">☁️ Sync Now</button>
+          <button class="btn btn-primary" id="btnSaveFirebaseConfig">Save & Connect</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main ES6 Entry Point -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

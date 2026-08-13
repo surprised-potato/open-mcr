@@ -1,0 +1,133 @@
+/**
+ * pipeline.js - Coordinates the complete OMR scanning process on an image matrix
+ */
+
+import { findCornerMarks } from './cornerFinder.js';
+import { form75q, form150q, Field, FieldType } from './gridInfo.js';
+import {
+  Grid,
+  calculateBubbleFillThreshold,
+  readFieldGroup,
+  decodeFieldValue,
+  decodeQuestionAnswer
+} from './gridReader.js';
+
+export function processScanImage(cv, imageMat, options = {}) {
+  const variantName = options.variant === '150' ? '150q' : '75q';
+  const formVariant = variantName === '150q' ? form150q : form75q;
+  const multiAsF = Boolean(options.multiAsF);
+  const emptyAsG = Boolean(options.emptyAsG);
+
+  // 1. Locate fiducial alignment marks
+  const { corners, lMark, squares } = findCornerMarks(cv, imageMat);
+
+  // 2. Construct 36x48 transformed grid
+  const grid = new Grid(corners, imageMat, cv);
+
+  // 3. Read metadata fields
+  const fieldData = {};
+  const allFillValues = [];
+  const fieldBubbleOverlays = [];
+
+  for (const [fieldName, groupInfo] of Object.entries(formVariant.fields)) {
+    if (!groupInfo) continue;
+    const { fills, bubbleCoordinates } = readFieldGroup(grid, groupInfo);
+    fieldData[fieldName] = { fills, groupInfo };
+    allFillValues.push(...fills);
+    fieldBubbleOverlays.push({ fieldName, bubbleCoordinates });
+  }
+
+  // 4. Read question answers
+  const questionFills = [];
+  const questionBubbleOverlays = [];
+
+  for (let q = 0; q < formVariant.questions.length; q++) {
+    const qInfo = formVariant.questions[q];
+    const { fills, bubbleCoordinates } = readFieldGroup(grid, qInfo);
+    questionFills.push(fills[0]);
+    allFillValues.push(fills[0]);
+    questionBubbleOverlays.push({ questionIndex: q, bubbleCoordinates: bubbleCoordinates[0] });
+  }
+
+  // 5. Calculate dynamic adaptive threshold
+  const threshold = calculateBubbleFillThreshold(allFillValues);
+
+  // 6. Decode metadata values
+  const decodedFields = {};
+  for (const [fieldName, data] of Object.entries(fieldData)) {
+    const isLetter = data.groupInfo.fieldsType === FieldType.LETTER;
+    decodedFields[fieldName] = decodeFieldValue(
+      data.fills,
+      threshold,
+      data.groupInfo.fieldsType,
+      multiAsF
+    );
+  }
+
+  // Combine names for 75q
+  let studentName = '';
+  if (formVariant.fields[Field.LAST_NAME]) {
+    const last = decodedFields[Field.LAST_NAME] || '';
+    const first = decodedFields[Field.FIRST_NAME] || '';
+    const mid = decodedFields[Field.MIDDLE_NAME] || '';
+    studentName = [last, first, mid].filter(Boolean).join(' ').trim();
+  }
+
+  // 7. Decode answers
+  const answers = questionFills.map(fills =>
+    decodeQuestionAnswer(fills, threshold, multiAsF, emptyAsG)
+  );
+
+  // 8. Package bubble annotations for canvas visual inspector
+  const annotatedBubbles = [];
+
+  // Question bubbles
+  questionBubbleOverlays.forEach((qOverlay, qIdx) => {
+    qOverlay.bubbleCoordinates.forEach((bubble, choiceIdx) => {
+      const choiceLetter = ['A', 'B', 'C', 'D', 'E'][choiceIdx];
+      const isFilled = bubble.fill > threshold;
+      annotatedBubbles.push({
+        type: 'question',
+        qNumber: qIdx + 1,
+        choice: choiceLetter,
+        center: bubble.center,
+        radius: bubble.radius,
+        fill: Number(bubble.fill.toFixed(3)),
+        isFilled
+      });
+    });
+  });
+
+  // Metadata bubbles
+  fieldBubbleOverlays.forEach(fOverlay => {
+    fOverlay.bubbleCoordinates.forEach(subField => {
+      subField.forEach(bubble => {
+        const isFilled = bubble.fill > threshold;
+        annotatedBubbles.push({
+          type: 'metadata',
+          fieldName: fOverlay.fieldName,
+          center: bubble.center,
+          radius: bubble.radius,
+          fill: Number(bubble.fill.toFixed(3)),
+          isFilled
+        });
+      });
+    });
+  });
+
+  return {
+    success: true,
+    studentId: decodedFields[Field.STUDENT_ID] || '',
+    studentName,
+    testFormCode: decodedFields[Field.TEST_FORM_CODE] || '',
+    courseId: decodedFields[Field.COURSE_ID] || '',
+    answers,
+    threshold: Number(threshold.toFixed(4)),
+    corners,
+    lMark,
+    squares,
+    annotatedBubbles,
+    imageWidth: imageMat.cols,
+    imageHeight: imageMat.rows
+  };
+}
