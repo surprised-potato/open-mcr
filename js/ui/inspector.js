@@ -330,21 +330,33 @@ export function initInspector(app) {
   // Pointer & Dragging Helpers for Canvas
   function getCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return {
-      x: (clientX - rect.left) / zoomScale,
-      y: (clientY - rect.top) / zoomScale
-    };
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+
+    if (!rect.width || !rect.height || !currentImage) {
+      return { x: 0, y: 0 };
+    }
+
+    // Scale CSS viewport position directly to full image resolution space
+    const scaleX = currentImage.width / rect.width;
+    const scaleY = currentImage.height / rect.height;
+
+    const imgX = (clientX - rect.left) * scaleX;
+    const imgY = (clientY - rect.top) * scaleY;
+
+    return { x: imgX, y: imgY };
   }
 
   function findCornerUnderPoint(pt) {
     if (!activeCorners || !currentImage) return -1;
-    const hitRadius = Math.max(16, 24 / zoomScale);
+    const rect = canvas.getBoundingClientRect();
+    const hitRadiusCss = 30; // 30px comfortable screen hit radius
+    const hitRadiusImage = hitRadiusCss * (rect.width ? (currentImage.width / rect.width) : 1);
+
     for (let i = 0; i < activeCorners.length; i++) {
       const c = activeCorners[i];
       const dist = Math.hypot(c.x - pt.x, c.y - pt.y);
-      if (dist <= hitRadius) {
+      if (dist <= hitRadiusImage) {
         return i;
       }
     }
@@ -358,6 +370,7 @@ export function initInspector(app) {
     const idx = findCornerUnderPoint(pt);
     if (idx !== -1) {
       draggingCornerIdx = idx;
+      canvas.style.cursor = 'grabbing';
       drawCanvas();
       e.preventDefault();
     }
@@ -370,6 +383,7 @@ export function initInspector(app) {
     if (draggingCornerIdx !== -1) {
       activeCorners[draggingCornerIdx].x = Math.max(0, Math.min(currentImage.width, pt.x));
       activeCorners[draggingCornerIdx].y = Math.max(0, Math.min(currentImage.height, pt.y));
+      canvas.style.cursor = 'grabbing';
       drawCanvas();
       e.preventDefault();
     } else {
@@ -381,16 +395,17 @@ export function initInspector(app) {
   function handlePointerUp() {
     if (draggingCornerIdx !== -1) {
       draggingCornerIdx = -1;
+      canvas.style.cursor = 'grab';
       drawCanvas();
     }
   }
 
   canvas.addEventListener('mousedown', handlePointerDown);
-  canvas.addEventListener('mousemove', handlePointerMove);
+  window.addEventListener('mousemove', handlePointerMove);
   window.addEventListener('mouseup', handlePointerUp);
 
   canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
-  canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+  window.addEventListener('touchmove', handlePointerMove, { passive: false });
   window.addEventListener('touchend', handlePointerUp);
 
   // Button Interactions
