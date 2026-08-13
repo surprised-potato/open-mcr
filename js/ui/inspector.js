@@ -208,9 +208,12 @@ export function initInspector(app) {
       ctx.fillText('⚠️ Failed to load scan image preview.', 300, 180);
       ctx.fillStyle = '#64748b';
       ctx.font = '12px Inter, sans-serif';
-      ctx.fillText('Use "📷 Select Image for This Sheet" in the sidebar to select the image file.', 300, 210);
-    };
     img.src = sub.imageDataUrl;
+    if (img.complete && img.naturalWidth > 0) {
+      currentImage = img;
+      initCornersForSub(sub, img.width, img.height);
+      drawCanvas();
+    }
   }
 
   function drawCanvas() {

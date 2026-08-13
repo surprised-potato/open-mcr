@@ -2,18 +2,29 @@
  * scorer.js - Scores extracted student answers against answer keys
  */
 
-export function scoreSubmission(submission, answerKeys) {
+export function scoreSubmission(submission, answerKeys = {}) {
+  if (!submission || !submission.answers || !Array.isArray(submission.answers)) {
+    return {
+      scored: false,
+      error: submission && submission.error ? submission.error : 'No extracted answers available to score',
+      points: 0,
+      totalQuestions: 0,
+      percentage: 0,
+      questionScores: []
+    };
+  }
+
   const formCode = (submission.testFormCode || '').trim().toUpperCase();
   
   let keyAnswers = null;
   let keyUsed = formCode;
 
-  if (answerKeys[formCode]) {
+  if (answerKeys && answerKeys[formCode]) {
     keyAnswers = answerKeys[formCode];
-  } else if (answerKeys['*']) {
+  } else if (answerKeys && answerKeys['*']) {
     keyAnswers = answerKeys['*'];
     keyUsed = '*';
-  } else if (Object.keys(answerKeys).length === 1) {
+  } else if (answerKeys && Object.keys(answerKeys).length === 1) {
     // If only one key exists, use it
     keyUsed = Object.keys(answerKeys)[0];
     keyAnswers = answerKeys[keyUsed];

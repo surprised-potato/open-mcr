@@ -178,18 +178,20 @@ export function initScanner(app) {
       } catch (err) {
         console.error("Scan error on", task.filename, err);
         const failedSub = {
-          id: `scan_${Date.now()}_failed`,
+          id: `scan_${Date.now()}_${Math.random().toString(36).substr(2, 6)}_failed`,
           filename: task.filename,
           imageDataUrl: task.dataUrl,
           studentId: 'ERROR',
           studentName: 'Failed to read sheet',
           testFormCode: '-',
+          answers: [],
           score: 0,
           points: 0,
           error: err.message || 'Alignment fiducials not found',
           scannedAt: new Date().toISOString()
         };
         app.state.submissions.push(failedSub);
+        app.saveState();
         renderBatchTable();
       }
 
