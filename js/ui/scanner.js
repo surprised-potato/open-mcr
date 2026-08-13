@@ -288,7 +288,8 @@ export function initScanner(app) {
           options: {
             variant: app.state.examConfig.variant,
             multiAsF: app.state.examConfig.multiAsF,
-            emptyAsG: app.state.examConfig.emptyAsG
+            emptyAsG: app.state.examConfig.emptyAsG,
+            manualCorners: task.manualCorners || undefined
           }
         }
       });
@@ -342,5 +343,5 @@ export function initScanner(app) {
 
   renderBatchTable();
 
-  return { renderBatchTable, handleIncomingFiles };
+  return { renderBatchTable, handleIncomingFiles, processSingleScan };
 }

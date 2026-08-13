@@ -1,5 +1,5 @@
 /**
- * inspector.js - Visual canvas sheet inspector with color-coded bubble overlay
+ * inspector.js - Visual canvas sheet inspector with interactive manual corner correction
  */
 
 export function initInspector(app) {
@@ -11,6 +11,17 @@ export function initInspector(app) {
   const chkBubbles = document.getElementById('chkLayerBubbles');
   const chkLabels = document.getElementById('chkLayerLabels');
 
+  const btnToggleEditCorners = document.getElementById('btnToggleEditCorners');
+  const btnApplyManualCorners = document.getElementById('btnApplyManualCorners');
+  const btnResetCorners = document.getElementById('btnResetCorners');
+  const cornerHelpBanner = document.getElementById('cornerHelpBanner');
+  const inspectErrorBanner = document.getElementById('inspectErrorBanner');
+  const inspectErrorMessage = document.getElementById('inspectErrorMessage');
+
+  const attachImageContainer = document.getElementById('attachImageContainer');
+  const btnAttachImage = document.getElementById('btnAttachImage');
+  const fileAttachImage = document.getElementById('fileAttachImage');
+
   const studentNameEl = document.getElementById('inspectStudentName');
   const studentDetailsEl = document.getElementById('inspectStudentDetails');
   const scoreBadgeEl = document.getElementById('inspectScoreBadge');
@@ -19,13 +30,17 @@ export function initInspector(app) {
 
   let currentImage = null;
   let zoomScale = 1.0;
+  let isEditingCorners = false;
+  let activeCorners = null; // Array of 4 points: [TL, TR, BR, BL]
+  let draggingCornerIdx = -1;
 
   function populateSelector() {
     selectSub.innerHTML = '<option value="">Select a scanned sheet...</option>';
     app.state.submissions.forEach((sub, idx) => {
       const opt = document.createElement('option');
       opt.value = sub.id;
-      opt.textContent = `${idx + 1}. ${sub.studentName || 'Student'} (${sub.studentId || 'No ID'}) - ${sub.score !== undefined ? sub.score + '%' : 'Error'}`;
+      const statusText = sub.error ? `⚠️ Error (${sub.error})` : `${sub.score !== undefined ? sub.score + '%' : 'Graded'}`;
+      opt.textContent = `${idx + 1}. ${sub.filename} — ${sub.studentName || 'Student'} (${statusText})`;
       if (sub.id === app.state.selectedScanId) {
         opt.selected = true;
       }
@@ -37,16 +52,56 @@ export function initInspector(app) {
     return app.state.submissions.find(s => s.id === app.state.selectedScanId);
   }
 
+  function initCornersForSub(sub, imgWidth, imgHeight) {
+    if (sub && sub.corners && Array.isArray(sub.corners) && sub.corners.length === 4) {
+      activeCorners = JSON.parse(JSON.stringify(sub.corners));
+    } else {
+      // Default 5% inset corners
+      const padX = imgWidth * 0.05;
+      const padY = imgHeight * 0.05;
+      activeCorners = [
+        { x: padX, y: padY },
+        { x: imgWidth - padX, y: padY },
+        { x: imgWidth - padX, y: imgHeight - padY },
+        { x: padX, y: imgHeight - padY }
+      ];
+    }
+  }
+
+  function updateCornerUIState() {
+    if (isEditingCorners) {
+      btnToggleEditCorners.classList.add('btn-primary');
+      btnToggleEditCorners.classList.remove('btn-subtle');
+      btnToggleEditCorners.textContent = '❌ Cancel Editing';
+      btnApplyManualCorners.style.display = 'inline-flex';
+      btnResetCorners.style.display = 'inline-flex';
+      cornerHelpBanner.style.display = 'block';
+    } else {
+      btnToggleEditCorners.classList.remove('btn-primary');
+      btnToggleEditCorners.classList.add('btn-subtle');
+      btnToggleEditCorners.textContent = '📍 Edit Corners';
+      btnApplyManualCorners.style.display = 'none';
+      btnResetCorners.style.display = 'none';
+      cornerHelpBanner.style.display = 'none';
+    }
+  }
+
   async function renderInspector() {
     populateSelector();
     const sub = getSelectedSubmission();
 
-    if (!sub || !sub.imageDataUrl) {
+    if (!sub) {
       studentNameEl.textContent = 'No Sheet Selected';
       studentDetailsEl.textContent = 'Select a sheet from the dropdown or batch list';
       scoreBadgeEl.textContent = 'Score: -';
+      scoreBadgeEl.className = 'badge badge-slate';
       thresholdBadgeEl.textContent = 'Threshold: -';
       qListEl.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 2rem;">No sheet selected.</p>';
+      inspectErrorBanner.style.display = 'none';
+      attachImageContainer.style.display = 'none';
+      isEditingCorners = false;
+      updateCornerUIState();
+
       canvas.width = 600;
       canvas.height = 400;
       ctx.fillStyle = '#f8fafc';
@@ -59,34 +114,72 @@ export function initInspector(app) {
     }
 
     // Update Sidebar details
-    studentNameEl.textContent = sub.studentName || 'Unknown Student';
-    studentDetailsEl.textContent = `ID: ${sub.studentId || '-'} • Form: ${sub.testFormCode || 'A'} • File: ${sub.filename}`;
-    scoreBadgeEl.textContent = `Score: ${sub.score !== undefined ? sub.score : 0}% (${sub.points || 0} pts)`;
-    scoreBadgeEl.className = `badge ${(sub.score >= 70) ? 'badge-mint' : 'badge-rose'}`;
+    studentNameEl.textContent = sub.studentName || (sub.error ? 'Failed to read sheet' : 'Unknown Student');
+    studentDetailsEl.textContent = `ID: ${sub.studentId || '-'} • Form: ${sub.testFormCode || '-'} • File: ${sub.filename}`;
+    
+    if (sub.error) {
+      scoreBadgeEl.textContent = 'Status: Error';
+      scoreBadgeEl.className = 'badge badge-rose';
+      inspectErrorBanner.style.display = 'block';
+      inspectErrorMessage.textContent = sub.error;
+    } else {
+      scoreBadgeEl.textContent = `Score: ${sub.score !== undefined ? sub.score : 0}% (${sub.points || 0} pts)`;
+      scoreBadgeEl.className = `badge ${(sub.score >= 70) ? 'badge-mint' : 'badge-rose'}`;
+      inspectErrorBanner.style.display = 'none';
+    }
+
     thresholdBadgeEl.textContent = `Threshold: ${sub.threshold ? (sub.threshold * 100).toFixed(1) + '%' : '-'}`;
 
     // Render Question Sidebar Breakdown
     const scored = app.scoreExtractedData(sub);
     qListEl.innerHTML = '';
     
-    if (scored.questionScores) {
+    if (scored && scored.questionScores && scored.questionScores.length > 0) {
       scored.questionScores.forEach(qItem => {
         const row = document.createElement('div');
         row.className = `breakdown-row ${qItem.isCorrect ? 'correct' : 'incorrect'}`;
-        
         row.innerHTML = `
           <span><strong>Q${qItem.q}:</strong> Marked <code>${qItem.studentAnswer || '—'}</code></span>
           <span>Key: <strong>${qItem.correctAnswer || '?'}</strong> ${qItem.isCorrect ? '✓' : '✗'}</span>
         `;
         qListEl.appendChild(row);
       });
+    } else {
+      qListEl.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 1.5rem;">${sub.error ? `Error: ${sub.error}. Adjust corners to re-process.` : 'No answers recorded.'}</p>`;
     }
 
-    // Load and draw image with overlays
+    // Check if image data is available
+    if (!sub.imageDataUrl) {
+      attachImageContainer.style.display = 'block';
+      currentImage = null;
+      canvas.width = 600;
+      canvas.height = 400;
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ef4444';
+      ctx.font = '14px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Image not loaded in session memory.', 300, 180);
+      ctx.fillStyle = '#64748b';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.fillText('Use the button in the sidebar to select the image file.', 300, 210);
+      return;
+    }
+
+    attachImageContainer.style.display = 'none';
+
+    // Auto-enable corner edit mode if submission has alignment error or missing corners
+    if (sub.error || !sub.corners) {
+      isEditingCorners = true;
+    }
+    updateCornerUIState();
+
+    // Load image
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       currentImage = img;
+      initCornersForSub(sub, img.width, img.height);
       drawCanvas();
     };
     img.src = sub.imageDataUrl;
@@ -110,42 +203,68 @@ export function initInspector(app) {
     const scored = app.scoreExtractedData(sub);
     const keyAnswers = app.getAnswersForForm(sub.testFormCode || 'A');
 
-    // 2. Draw Fiducial Marks
-    if (chkFiducials.checked && sub.corners) {
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#4f46e5';
+    // 2. Draw Fiducial Marks / Interactive Manual Corners
+    if ((chkFiducials.checked || isEditingCorners) && activeCorners && activeCorners.length === 4) {
+      // Quadrilateral outline
+      ctx.lineWidth = Math.max(2, 3 / zoomScale);
+      ctx.strokeStyle = isEditingCorners ? '#f59e0b' : '#4f46e5';
+      if (isEditingCorners) {
+        ctx.setLineDash([8 / zoomScale, 4 / zoomScale]);
+      } else {
+        ctx.setLineDash([]);
+      }
       ctx.beginPath();
-      ctx.moveTo(sub.corners[0].x, sub.corners[0].y);
-      for (let i = 1; i < sub.corners.length; i++) {
-        ctx.lineTo(sub.corners[i].x, sub.corners[i].y);
+      ctx.moveTo(activeCorners[0].x, activeCorners[0].y);
+      for (let i = 1; i < activeCorners.length; i++) {
+        ctx.lineTo(activeCorners[i].x, activeCorners[i].y);
       }
       ctx.closePath();
       ctx.stroke();
+      ctx.setLineDash([]);
 
-      // Highlight 4 corners
-      sub.corners.forEach((c, idx) => {
-        ctx.fillStyle = idx === 0 ? '#ef4444' : '#3b82f6';
+      // Corner handle nodes (TL, TR, BR, BL)
+      const handleRadius = Math.max(7, 12 / zoomScale);
+      const cornerColors = ['#ef4444', '#3b82f6', '#22c55e', '#a855f7'];
+      const cornerLabels = ['TL', 'TR', 'BR', 'BL'];
+
+      activeCorners.forEach((c, idx) => {
+        // Dragging halo
+        if (draggingCornerIdx === idx) {
+          ctx.fillStyle = 'rgba(245, 158, 11, 0.45)';
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, handleRadius * 1.8, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+
+        ctx.fillStyle = cornerColors[idx];
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(1.5, 2.5 / zoomScale);
         ctx.beginPath();
-        ctx.arc(c.x, c.y, 8, 0, 2 * Math.PI);
+        ctx.arc(c.x, c.y, handleRadius, 0, 2 * Math.PI);
         ctx.fill();
+        ctx.stroke();
+
+        // Label
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${Math.max(9, Math.round(11 / zoomScale))}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(cornerLabels[idx], c.x, c.y);
       });
     }
 
     // 3. Draw Bubble Overlays
-    if (chkBubbles.checked && sub.annotatedBubbles) {
+    if (chkBubbles.checked && sub.annotatedBubbles && !isEditingCorners) {
       sub.annotatedBubbles.forEach(b => {
         if (b.type === 'question') {
           const qScore = scored.questionScores ? scored.questionScores[b.qNumber - 1] : null;
           const isCorrectChoice = keyAnswers && keyAnswers[b.qNumber - 1] === b.choice;
 
           if (b.isFilled) {
-            // Student filled this bubble
             if (isCorrectChoice) {
-              // Correct mark: Pastel Mint
               ctx.fillStyle = 'rgba(34, 197, 94, 0.55)';
               ctx.strokeStyle = '#16a34a';
             } else {
-              // Incorrect mark: Pastel Rose
               ctx.fillStyle = 'rgba(239, 68, 68, 0.55)';
               ctx.strokeStyle = '#dc2626';
             }
@@ -156,7 +275,6 @@ export function initInspector(app) {
             ctx.stroke();
           }
 
-          // Draw Answer Key Ring
           if (chkLabels.checked && isCorrectChoice && !b.isFilled) {
             ctx.strokeStyle = '#0284c7';
             ctx.lineWidth = 2.5;
@@ -167,7 +285,6 @@ export function initInspector(app) {
             ctx.setLineDash([]);
           }
         } else if (b.type === 'metadata' && b.isFilled) {
-          // Metadata filled bubble: Pastel Violet
           ctx.fillStyle = 'rgba(168, 85, 247, 0.45)';
           ctx.strokeStyle = '#7c3aed';
           ctx.lineWidth = 1.5;
@@ -182,10 +299,164 @@ export function initInspector(app) {
     ctx.restore();
   }
 
-  // Event Listeners
+  // Pointer & Dragging Helpers for Canvas
+  function getCanvasCoords(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) / zoomScale,
+      y: (clientY - rect.top) / zoomScale
+    };
+  }
+
+  function findCornerUnderPoint(pt) {
+    if (!activeCorners || !currentImage) return -1;
+    const hitRadius = Math.max(16, 24 / zoomScale);
+    for (let i = 0; i < activeCorners.length; i++) {
+      const c = activeCorners[i];
+      const dist = Math.hypot(c.x - pt.x, c.y - pt.y);
+      if (dist <= hitRadius) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // Mouse & Touch Event Listeners for Corner Dragging
+  function handlePointerDown(e) {
+    if (!isEditingCorners || !currentImage) return;
+    const pt = getCanvasCoords(e);
+    const idx = findCornerUnderPoint(pt);
+    if (idx !== -1) {
+      draggingCornerIdx = idx;
+      drawCanvas();
+      e.preventDefault();
+    }
+  }
+
+  function handlePointerMove(e) {
+    if (!isEditingCorners || !currentImage) return;
+    const pt = getCanvasCoords(e);
+
+    if (draggingCornerIdx !== -1) {
+      activeCorners[draggingCornerIdx].x = Math.max(0, Math.min(currentImage.width, pt.x));
+      activeCorners[draggingCornerIdx].y = Math.max(0, Math.min(currentImage.height, pt.y));
+      drawCanvas();
+      e.preventDefault();
+    } else {
+      const idx = findCornerUnderPoint(pt);
+      canvas.style.cursor = idx !== -1 ? 'grab' : 'default';
+    }
+  }
+
+  function handlePointerUp() {
+    if (draggingCornerIdx !== -1) {
+      draggingCornerIdx = -1;
+      drawCanvas();
+    }
+  }
+
+  canvas.addEventListener('mousedown', handlePointerDown);
+  canvas.addEventListener('mousemove', handlePointerMove);
+  window.addEventListener('mouseup', handlePointerUp);
+
+  canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+  canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+  window.addEventListener('touchend', handlePointerUp);
+
+  // Button Interactions
   selectSub.addEventListener('change', (e) => {
     app.state.selectedScanId = e.target.value;
+    isEditingCorners = false;
     renderInspector();
+  });
+
+  btnToggleEditCorners.addEventListener('click', () => {
+    isEditingCorners = !isEditingCorners;
+    const sub = getSelectedSubmission();
+    if (isEditingCorners && currentImage && !activeCorners) {
+      initCornersForSub(sub, currentImage.width, currentImage.height);
+    }
+    updateCornerUIState();
+    drawCanvas();
+  });
+
+  btnResetCorners.addEventListener('click', () => {
+    if (!currentImage) return;
+    const sub = getSelectedSubmission();
+    initCornersForSub(sub ? { ...sub, corners: null } : null, currentImage.width, currentImage.height);
+    drawCanvas();
+  });
+
+  btnApplyManualCorners.addEventListener('click', async () => {
+    const sub = getSelectedSubmission();
+    if (!sub || !currentImage || !activeCorners) return;
+
+    btnApplyManualCorners.disabled = true;
+    btnApplyManualCorners.textContent = '⏳ Processing OMR...';
+
+    try {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = currentImage.width;
+      tempCanvas.height = currentImage.height;
+      const tCtx = tempCanvas.getContext('2d');
+      tCtx.drawImage(currentImage, 0, 0);
+      const imageData = tCtx.getImageData(0, 0, currentImage.width, currentImage.height);
+
+      const scanResult = await app.ui.scanner.processSingleScan({
+        filename: sub.filename,
+        imageData,
+        manualCorners: activeCorners
+      });
+
+      // Update submission data
+      sub.studentId = scanResult.studentId || 'Unknown';
+      sub.studentName = scanResult.studentName || 'Unknown';
+      sub.testFormCode = scanResult.testFormCode || 'A';
+      sub.courseId = scanResult.courseId || '';
+      sub.answers = scanResult.answers;
+      sub.threshold = scanResult.threshold;
+      sub.corners = scanResult.corners || activeCorners;
+      sub.lMark = scanResult.lMark;
+      sub.squares = scanResult.squares;
+      sub.annotatedBubbles = scanResult.annotatedBubbles;
+      sub.imageWidth = scanResult.imageWidth;
+      sub.imageHeight = scanResult.imageHeight;
+
+      delete sub.error; // Clear error!
+
+      // Re-score submission
+      const scored = app.scoreExtractedData(sub);
+      sub.score = scored.percentage;
+      sub.points = scored.points;
+      sub.scoredStatus = scored.scored;
+      delete sub.scoredError;
+
+      app.saveState();
+      isEditingCorners = false;
+      app.renderAll();
+    } catch (err) {
+      alert("Error re-processing sheet with manual corners: " + err.message);
+    } finally {
+      btnApplyManualCorners.disabled = false;
+      btnApplyManualCorners.textContent = '⚡ Re-process Sheet';
+    }
+  });
+
+  // Re-attach Image handler
+  btnAttachImage.addEventListener('click', () => fileAttachImage.click());
+  fileAttachImage.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    const sub = getSelectedSubmission();
+    if (!file || !sub) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      sub.imageDataUrl = evt.target.result;
+      renderInspector();
+    };
+    reader.readAsDataURL(file);
   });
 
   chkFiducials.addEventListener('change', drawCanvas);
@@ -207,8 +478,12 @@ export function initInspector(app) {
     drawCanvas();
   });
 
-  return { renderInspector, selectSubmission: (id) => {
-    app.state.selectedScanId = id;
-    renderInspector();
-  }};
+  return {
+    renderInspector,
+    selectSubmission: (id) => {
+      app.state.selectedScanId = id;
+      isEditingCorners = false;
+      renderInspector();
+    }
+  };
 }

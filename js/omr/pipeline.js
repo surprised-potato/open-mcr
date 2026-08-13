@@ -18,8 +18,18 @@ export function processScanImage(cv, imageMat, options = {}) {
   const multiAsF = Boolean(options.multiAsF);
   const emptyAsG = Boolean(options.emptyAsG);
 
-  // 1. Locate fiducial alignment marks
-  const { corners, lMark, squares } = findCornerMarks(cv, imageMat);
+  // 1. Locate fiducial alignment marks or use manual corners if provided
+  let corners, lMark, squares;
+  if (options.manualCorners && Array.isArray(options.manualCorners) && options.manualCorners.length === 4) {
+    corners = options.manualCorners;
+    lMark = null;
+    squares = [];
+  } else {
+    const found = findCornerMarks(cv, imageMat);
+    corners = found.corners;
+    lMark = found.lMark;
+    squares = found.squares;
+  }
 
   // 2. Construct 36x48 transformed grid
   const grid = new Grid(corners, imageMat, cv);

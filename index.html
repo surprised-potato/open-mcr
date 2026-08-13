@@ -237,17 +237,27 @@
         <div class="inspector-layout">
           <!-- Canvas Viewer -->
           <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-              <div style="display: flex; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+              <div style="display: flex; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); align-items: center;">
                 <label><input type="checkbox" id="chkLayerFiducials" checked> Fiducials</label>
                 <label><input type="checkbox" id="chkLayerBubbles" checked> Bubble Overlays</label>
                 <label><input type="checkbox" id="chkLayerLabels" checked> Answer Key Rings</label>
               </div>
-              <div style="display: flex; gap: 0.3rem;">
-                <button class="btn btn-sm" id="btnZoomIn">➕</button>
-                <button class="btn btn-sm" id="btnZoomOut">➖</button>
-                <button class="btn btn-sm" id="btnZoomReset">Reset</button>
+              <div style="display: flex; gap: 0.4rem; align-items: center;">
+                <button class="btn btn-sm btn-subtle" id="btnToggleEditCorners">📍 Edit Corners</button>
+                <button class="btn btn-sm btn-primary" id="btnApplyManualCorners" style="display: none;">⚡ Re-process Sheet</button>
+                <button class="btn btn-sm btn-subtle" id="btnResetCorners" style="display: none;">Reset Handles</button>
+                <div style="display: flex; gap: 0.2rem; margin-left: 0.5rem;">
+                  <button class="btn btn-sm" id="btnZoomIn" title="Zoom In">➕</button>
+                  <button class="btn btn-sm" id="btnZoomOut" title="Zoom Out">➖</button>
+                  <button class="btn btn-sm" id="btnZoomReset">Reset</button>
+                </div>
               </div>
+            </div>
+
+            <!-- Active Corner Edit Banner -->
+            <div id="cornerHelpBanner" style="display: none; background-color: var(--pastel-amber-bg, #fef3c7); color: var(--pastel-amber-text, #92400e); border: 1px solid var(--pastel-amber-border, #fcd34d); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm, 6px); font-size: 0.8rem; font-weight: 500; margin-bottom: 0.5rem;">
+              📍 <strong>Manual Corner Alignment Mode:</strong> Drag the 4 corner handles (🔴 Top-Left, 🔵 Top-Right, 🟢 Bottom-Right, 🟣 Bottom-Left) on the canvas to match the 4 outer fiducial marks on the exam sheet, then click <strong>"⚡ Re-process Sheet"</strong>.
             </div>
 
             <div class="canvas-wrapper" id="canvasWrapper">
@@ -264,6 +274,19 @@
                 <span class="badge badge-mint" id="inspectScoreBadge">Score: -</span>
                 <span class="badge badge-slate" id="inspectThresholdBadge">Threshold: -</span>
               </div>
+            </div>
+
+            <!-- Error Banner -->
+            <div id="inspectErrorBanner" style="display: none; background-color: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); padding: 0.6rem; border-radius: var(--radius-sm, 6px); font-size: 0.8rem; margin-bottom: 0.75rem;">
+              <strong>⚠️ Alignment Error:</strong> <span id="inspectErrorMessage">Fiducials not found</span>.<br>
+              Adjust the 4 corner handles on the image and click <strong>"⚡ Re-process Sheet"</strong>.
+            </div>
+
+            <!-- Re-attach Image Button (if image missing after reload) -->
+            <div id="attachImageContainer" style="display: none; margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-card-subtle, #f8fafc); border: 1px dashed var(--border-color); border-radius: var(--radius-sm, 6px); text-align: center;">
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Scan image not loaded in session memory.</p>
+              <input type="file" id="fileAttachImage" accept="image/*,.pdf" style="display: none;">
+              <button class="btn btn-sm btn-subtle" id="btnAttachImage">📷 Select Image for This Sheet</button>
             </div>
 
             <h4 style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">Question Breakdown</h4>
