@@ -174,13 +174,41 @@ export function initInspector(app) {
     }
     updateCornerUIState();
 
+    // Clear stale placeholder & show loading state on canvas
+    canvas.width = 600;
+    canvas.height = 400;
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#64748b';
+    ctx.font = '14px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`⏳ Loading sheet preview (${sub.filename})...`, 300, 200);
+
     // Load image
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (typeof sub.imageDataUrl === 'string' && (sub.imageDataUrl.startsWith('http://') || sub.imageDataUrl.startsWith('https://'))) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => {
       currentImage = img;
       initCornersForSub(sub, img.width, img.height);
       drawCanvas();
+    };
+    img.onerror = (err) => {
+      console.error("Failed to load scan image into canvas:", err);
+      attachImageContainer.style.display = 'block';
+      currentImage = null;
+      canvas.width = 600;
+      canvas.height = 400;
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ef4444';
+      ctx.font = '14px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠️ Failed to load scan image preview.', 300, 180);
+      ctx.fillStyle = '#64748b';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.fillText('Use "📷 Select Image for This Sheet" in the sidebar to select the image file.', 300, 210);
     };
     img.src = sub.imageDataUrl;
   }
