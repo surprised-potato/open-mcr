@@ -44,7 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('--mcta',
                         action='store_true',
                         help='Output additional files for Multiple Choice Test Analysis.')
-    parser.add_argument('--disable-timestamps',
+    parser.add_argument('--disable-timestamps', '--disable-timestamp',
                         action='store_true',
                         help='Disable timestamps in file names. Useful when consistent file names are required. Existing files will be overwritten without warning!')
 
@@ -66,7 +66,6 @@ if __name__ == '__main__':
     debug_mode_on = args.debug
     form_variant = grid_i.form_150q if args.variant == '150' else grid_i.form_75q
     files_timestamp = datetime.now().replace(microsecond=0) if not args.disable_timestamps else None
-    print(arrangement_file)
     process_input(image_paths,
                   output_folder,
                   multi_answers_as_f,

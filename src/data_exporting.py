@@ -36,9 +36,12 @@ def make_dir_if_not_exists(path: pathlib.Path):
 
 def validate_order_map(order_map: tp.Dict[str, tp.List[int]],
                        num_questions: int):
-    """Validate the given order map and throw ValueError if the map is invalid."""
+    """Validate the given 0-indexed order map and throw ValueError if the map is invalid."""
+    if not order_map:
+        raise ValueError("Arrangement file contains no valid form entries.")
     for [form_code, map_list] in order_map.items():
-        if (min(map_list) != 1 or max(map_list) != num_questions
+        if (len(map_list) != num_questions or min(map_list) != 0
+                or max(map_list) != num_questions - 1
                 or len(set(map_list)) != num_questions):
             raise ValueError(
                 f"Arrangement file entry for '{form_code}' is invalid. All arrangement file entries must contain one of each index from 1 to the number of questions."
@@ -89,6 +92,9 @@ class OutputSheet():
             list_utils.remove_index(row, deleted_column_index)
             for row in self.data
         ]
+        self.first_question_column_index = len(self.field_columns)
+        self.form_code_column_index = self.field_columns.index(
+            Field.TEST_FORM_CODE) if (Field.TEST_FORM_CODE in self.field_columns) else None
 
     def sortByName(self):
         data = self.data[1:]
@@ -180,7 +186,6 @@ class OutputSheet():
         # order_map will be a dict matching form code keys to a list where the
         # new index of question `i` in `key` is `order_map[key][i]`
         order_map: tp.Dict[str, tp.List[int]] = {}
-        validate_order_map(order_map, self.num_questions)
 
         with open(str(arrangement_file), 'r', newline='') as file:
             reader = csv.reader(file)
@@ -195,6 +200,8 @@ class OutputSheet():
                     int(n) - 1 for n in stripped_form[first_answer_index:]
                 ]
                 order_map[form_code] = to_order_zero_ind
+
+        validate_order_map(order_map, self.num_questions)
 
         sheet_form_code_index = list_utils.find_index(
             self.data[0], COLUMN_NAMES[Field.TEST_FORM_CODE])

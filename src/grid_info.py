@@ -126,5 +126,5 @@ form_150q = FormVariant(
 
 
 class dimensions:
-    vertical_cells = 36
-    horizontal_cells = 48
+    vertical_cells = 48
+    horizontal_cells = 36

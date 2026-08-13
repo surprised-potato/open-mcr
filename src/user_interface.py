@@ -610,8 +610,10 @@ class MainWindow:
 
     def __show_help(self):
         helpfile = str(Path(__file__).parent / "assets" / "manual.pdf")
-        if platform.system() in ('Darwin','Linux'):
-            subprocess.Popen(['open',helpfile])
+        if platform.system() == 'Darwin':
+            subprocess.Popen(['open', helpfile])
+        elif platform.system() == 'Linux':
+            subprocess.Popen(['xdg-open', helpfile])
         else:
             subprocess.Popen([helpfile], shell=True)
 
@@ -620,18 +622,19 @@ class MainWindow:
             helpfile = str(
                 Path(__file__).parent / "assets" /
                 "multiple_choice_sheet_75q.pdf")
-            if platform.system() in ('Darwin','Linux'):
-                subprocess.Popen(['open', helpfile])
-            else:
-                subprocess.Popen([helpfile], shell=True)
         elif (self.form_variant == FormVariantSelection.VARIANT_150_Q):
             helpfile = str(
                 Path(__file__).parent / "assets" /
                 "multiple_choice_sheet_150q.pdf")
-            if platform.system() in ('Darwin','Linux'):
-                subprocess.Popen(['open', helpfile])
-            else:
-                subprocess.Popen([helpfile], shell=True)
+        else:
+            return
+
+        if platform.system() == 'Darwin':
+            subprocess.Popen(['open', helpfile])
+        elif platform.system() == 'Linux':
+            subprocess.Popen(['xdg-open', helpfile])
+        else:
+            subprocess.Popen([helpfile], shell=True)
 
     def __on_close(self):
         self.__app.destroy()

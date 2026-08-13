@@ -72,10 +72,10 @@ class OpenMCRApp {
         examConfig: this.state.examConfig,
         answerKeys: this.state.answerKeys,
         // We only persist metadata and answers to localStorage, keeping images in memory for session privacy
-        submissions: this.state.submissions.map(s => ({
-          ...s,
-          // keep imageDataUrl in session memory
-        })),
+        submissions: this.state.submissions.map(s => {
+          const { imageDataUrl, ...rest } = s;
+          return rest;
+        }),
         selectedScanId: this.state.selectedScanId
       };
       localStorage.setItem(STORAGE_STATE_KEY, JSON.stringify(copy));

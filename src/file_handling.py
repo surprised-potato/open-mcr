@@ -34,7 +34,8 @@ def filter_by_extensions(files: tp.Sequence[pathlib.Path],
       A filtered list of the same path objects, *not* copies of the original
         objects.
     """
-    return [file for file in files if "".join(file.suffixes) in extensions]
+    lower_extensions = [ext.lower() for ext in extensions]
+    return [file for file in files if file.suffix.lower() in lower_extensions]
 
 
 def filter_images(files: tp.Sequence[pathlib.Path]) -> tp.List[pathlib.Path]:
