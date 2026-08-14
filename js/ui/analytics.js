@@ -3,27 +3,30 @@
  */
 
 export function initAnalytics(app) {
-  const statCount = document.getElementById('statCount');
-  const statAverage = document.getElementById('statAverage');
+  const statTotalGraded = document.getElementById('statTotalGraded') || document.getElementById('statCount');
+  const statClassAverage = document.getElementById('statClassAverage') || document.getElementById('statAverage');
+  const statPassingRate = document.getElementById('statPassingRate');
   const statMedian = document.getElementById('statMedian');
   const statMax = document.getElementById('statMax');
   const statMin = document.getElementById('statMin');
   const itemTableBody = document.getElementById('itemAnalysisTableBody');
 
   function renderAnalytics() {
-    const validSubs = app.state.submissions.filter(s => !s.error && s.score !== undefined);
-    const numQ = app.state.examConfig.variant === '150' ? 150 : 75;
+    const activeExam = app.getActiveExam();
+    const validSubs = app.getActiveSubmissions().filter(s => !s.error && s.score !== undefined);
+    const numQ = activeExam.variant === '150' ? 150 : 75;
 
-    statCount.textContent = validSubs.length;
+    if (statTotalGraded) statTotalGraded.textContent = validSubs.length;
 
     if (validSubs.length === 0) {
-      statAverage.textContent = '0.0%';
-      statMedian.textContent = '0.0%';
-      statMax.textContent = '0.0%';
-      statMin.textContent = '0.0%';
+      if (statClassAverage) statClassAverage.textContent = '0.0%';
+      if (statPassingRate) statPassingRate.textContent = '0.0%';
+      if (statMedian) statMedian.textContent = '0.0%';
+      if (statMax) statMax.textContent = '0.0%';
+      if (statMin) statMin.textContent = '0.0%';
       itemTableBody.innerHTML = `
         <tr>
-          <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 2rem;">Scan exam sheets to generate item analysis.</td>
+          <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 2rem;">Scan exam sheets for "${activeExam.name}" to generate item analysis.</td>
         </tr>`;
       return;
     }
@@ -33,15 +36,18 @@ export function initAnalytics(app) {
     const avg = sum / scores.length;
     const mid = Math.floor(scores.length / 2);
     const median = scores.length % 2 !== 0 ? scores[mid] : ((scores[mid - 1] + scores[mid]) / 2);
+    const passingCount = scores.filter(s => s >= 50).length;
+    const passingPct = (passingCount / scores.length) * 100;
 
-    statAverage.textContent = `${avg.toFixed(1)}%`;
-    statMedian.textContent = `${median.toFixed(1)}%`;
-    statMax.textContent = `${scores[scores.length - 1].toFixed(1)}%`;
-    statMin.textContent = `${scores[0].toFixed(1)}%`;
+    if (statClassAverage) statClassAverage.textContent = `${avg.toFixed(1)}%`;
+    if (statPassingRate) statPassingRate.textContent = `${passingPct.toFixed(1)}%`;
+    if (statMedian) statMedian.textContent = `${median.toFixed(1)}%`;
+    if (statMax) statMax.textContent = `${scores[scores.length - 1].toFixed(1)}%`;
+    if (statMin) statMin.textContent = `${scores[0].toFixed(1)}%`;
 
     // Item Difficulty, Distractor & Discrimination Analysis
     itemTableBody.innerHTML = '';
-    const defaultKey = app.state.answerKeys['*'] || Object.values(app.state.answerKeys)[0] || [];
+    const defaultKey = activeExam.answerKeys['*'] || Object.values(activeExam.answerKeys)[0] || [];
 
     // Sort submissions descending for Top 10% and Bottom 10% cohorts
     const sortedSubs = [...validSubs].sort((a, b) => b.score - a.score);

@@ -1,5 +1,6 @@
 /**
  * app.js - Main Application Coordinator for OpenMCR Web
+ * Organizes multiple exams, answer keys, scan queues, and student rosters by Exam Title.
  */
 
 import { scoreSubmission } from './omr/scorer.js';
@@ -11,6 +12,8 @@ import { initAnalytics } from './ui/analytics.js';
 import { initFirebaseModal } from './ui/firebaseModal.js';
 import { initSheetViewer } from './ui/sheetViewer.js';
 import {
+  saveExamsToDB,
+  loadExamsFromDB,
   saveSubmissionsToDB,
   loadSubmissionsFromDB,
   deleteSubmissionFromDB,
@@ -26,59 +29,108 @@ class OpenMCRApp {
   }
 
   loadInitialState() {
+    const defaultExam = {
+      id: `exam_${Date.now()}`,
+      name: 'Physics 101 Midterm',
+      variant: '75',
+      courseId: 'PHY2048',
+      multiAsF: false,
+      emptyAsG: false,
+      sortByName: true,
+      answerKeys: {
+        '*': Array(75).fill('A'),
+        'A': Array(75).fill('A')
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
     try {
       const saved = localStorage.getItem(STORAGE_STATE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        return {
-          examConfig: parsed.examConfig || {
-            id: `exam_${Date.now()}`,
-            name: 'Physics 101 Midterm',
-            variant: '75',
-            courseId: 'PHY2048',
-            multiAsF: false,
-            emptyAsG: false,
-            sortByName: true
-          },
-          answerKeys: parsed.answerKeys || {
-            '*': Array(75).fill('A'),
-            'A': Array(75).fill('A')
-          },
-          submissions: parsed.submissions || [],
+        let exams = parsed.exams;
+        if (!exams || exams.length === 0) {
+          if (parsed.examConfig) {
+            exams = [{
+              id: parsed.examConfig.id || `exam_${Date.now()}`,
+              name: parsed.examConfig.name || 'Physics 101 Midterm',
+              variant: parsed.examConfig.variant || '75',
+              courseId: parsed.examConfig.courseId || 'PHY2048',
+              multiAsF: Boolean(parsed.examConfig.multiAsF),
+              emptyAsG: Boolean(parsed.examConfig.emptyAsG),
+              sortByName: parsed.examConfig.sortByName !== undefined ? parsed.examConfig.sortByName : true,
+              answerKeys: parsed.answerKeys || { '*': Array(75).fill('A'), 'A': Array(75).fill('A') },
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }];
+          } else {
+            exams = [defaultExam];
+          }
+        }
+
+        const activeExamId = parsed.activeExamId && exams.some(e => e.id === parsed.activeExamId)
+          ? parsed.activeExamId
+          : exams[0].id;
+
+        const submissions = (parsed.submissions || []).map(s => ({
+          ...s,
+          examId: s.examId || activeExamId
+        }));
+
+        const stateObj = {
+          activeExamId,
+          exams,
+          submissions,
           selectedScanId: parsed.selectedScanId || null,
           activeTab: 'setup'
         };
+
+        this.bindStateProxies(stateObj);
+        return stateObj;
       }
     } catch (e) {
       console.warn("Could not load saved state:", e);
     }
 
-    return {
-      examConfig: {
-        id: `exam_${Date.now()}`,
-        name: 'Physics 101 Midterm',
-        variant: '75',
-        courseId: 'PHY2048',
-        multiAsF: false,
-        emptyAsG: false,
-        sortByName: true
-      },
-      answerKeys: {
-        '*': Array(75).fill('A'),
-        'A': Array(75).fill('A')
-      },
+    const stateObj = {
+      activeExamId: defaultExam.id,
+      exams: [defaultExam],
       submissions: [],
       selectedScanId: null,
       activeTab: 'setup'
     };
+    this.bindStateProxies(stateObj);
+    return stateObj;
+  }
+
+  bindStateProxies(stateObj) {
+    const self = this;
+    Object.defineProperty(stateObj, 'examConfig', {
+      get() { return self.getActiveExam(); },
+      configurable: true
+    });
+    Object.defineProperty(stateObj, 'answerKeys', {
+      get() { return self.getActiveExam().answerKeys; },
+      set(newKeys) { self.getActiveExam().answerKeys = newKeys; },
+      configurable: true
+    });
+  }
+
+  getActiveExam() {
+    return this.state.exams.find(e => e.id === this.state.activeExamId) || this.state.exams[0];
+  }
+
+  getActiveSubmissions() {
+    const active = this.getActiveExam();
+    return this.state.submissions.filter(s => !s.examId || s.examId === active.id);
   }
 
   saveState() {
     try {
       const copy = {
-        examConfig: this.state.examConfig,
-        answerKeys: this.state.answerKeys,
-        // Save metadata to localStorage (without heavy images to prevent quota overflow)
+        activeExamId: this.state.activeExamId,
+        exams: this.state.exams,
         submissions: this.state.submissions.map(s => {
           const { imageDataUrl, ...rest } = s;
           return rest;
@@ -87,7 +139,7 @@ class OpenMCRApp {
       };
       localStorage.setItem(STORAGE_STATE_KEY, JSON.stringify(copy));
 
-      // Asynchronously store full submissions including full-resolution scan images in local IndexedDB
+      saveExamsToDB(this.state.exams);
       saveSubmissionsToDB(this.state.submissions);
     } catch (e) {
       console.warn("Could not persist state:", e);
@@ -104,53 +156,93 @@ class OpenMCRApp {
       });
     });
 
-    // 2. Bind Setup Inputs
+    // 2. Bind Exam Session Bar Controls
+    const selectActiveExam = document.getElementById('selectActiveExam');
+    const btnNewExamPrompt = document.getElementById('btnNewExamPrompt');
+    const btnNewExamInSetup = document.getElementById('btnNewExamInSetup');
+    const btnRenameExam = document.getElementById('btnRenameExam');
+    const btnDeleteExam = document.getElementById('btnDeleteExam');
+
+    if (selectActiveExam) {
+      selectActiveExam.addEventListener('change', (e) => {
+        this.switchExam(e.target.value);
+      });
+    }
+
+    const handleCreateExam = () => {
+      const title = prompt("Enter new Exam Title (e.g. 'Chemistry Quiz 2', 'Calculus Final Exam'):");
+      if (title && title.trim()) {
+        this.createExam(title.trim());
+      }
+    };
+
+    if (btnNewExamPrompt) btnNewExamPrompt.addEventListener('click', handleCreateExam);
+    if (btnNewExamInSetup) btnNewExamInSetup.addEventListener('click', handleCreateExam);
+
+    if (btnRenameExam) {
+      btnRenameExam.addEventListener('click', () => {
+        const active = this.getActiveExam();
+        const newTitle = prompt("Rename active exam title:", active.name);
+        if (newTitle && newTitle.trim() && newTitle.trim() !== active.name) {
+          this.renameActiveExam(newTitle.trim());
+        }
+      });
+    }
+
+    if (btnDeleteExam) {
+      btnDeleteExam.addEventListener('click', () => {
+        this.deleteActiveExam();
+      });
+    }
+
+    // 3. Bind Setup Inputs
     const inputExamName = document.getElementById('inputExamName');
     const selectVariant = document.getElementById('selectFormVariant');
     const inputCourseId = document.getElementById('inputCourseId');
     const chkMultiAsF = document.getElementById('chkMultiAsF');
     const chkEmptyAsG = document.getElementById('chkEmptyAsG');
     const chkSortByName = document.getElementById('chkSortByName');
-    const badgeVariant = document.getElementById('examVariantBadge');
-
-    inputExamName.value = this.state.examConfig.name || '';
-    selectVariant.value = this.state.examConfig.variant || '75';
-    inputCourseId.value = this.state.examConfig.courseId || '';
-    chkMultiAsF.checked = Boolean(this.state.examConfig.multiAsF);
-    chkEmptyAsG.checked = Boolean(this.state.examConfig.emptyAsG);
-    chkSortByName.checked = Boolean(this.state.examConfig.sortByName);
-    badgeVariant.textContent = this.state.examConfig.variant === '150' ? '150 Questions' : '75 Questions';
 
     inputExamName.addEventListener('input', () => {
-      this.state.examConfig.name = inputExamName.value;
+      this.getActiveExam().name = inputExamName.value;
       this.saveState();
+      this.renderExamBar();
     });
 
     selectVariant.addEventListener('change', () => {
-      this.state.examConfig.variant = selectVariant.value;
-      badgeVariant.textContent = selectVariant.value === '150' ? '150 Questions' : '75 Questions';
+      const active = this.getActiveExam();
+      active.variant = selectVariant.value;
+      const numQ = active.variant === '150' ? 150 : 75;
+      // Adjust answer keys size
+      for (const form of Object.keys(active.answerKeys)) {
+        if (active.answerKeys[form].length !== numQ) {
+          active.answerKeys[form] = Array(numQ).fill('A');
+        }
+      }
       this.saveState();
+      this.renderExamBar();
       this.ui.keyEditor.renderKeyMatrix();
       this.recalculateAllScores();
     });
 
     inputCourseId.addEventListener('input', () => {
-      this.state.examConfig.courseId = inputCourseId.value;
+      this.getActiveExam().courseId = inputCourseId.value;
       this.saveState();
+      this.renderAllExamsTable();
     });
 
     chkMultiAsF.addEventListener('change', () => {
-      this.state.examConfig.multiAsF = chkMultiAsF.checked;
+      this.getActiveExam().multiAsF = chkMultiAsF.checked;
       this.saveState();
     });
 
     chkEmptyAsG.addEventListener('change', () => {
-      this.state.examConfig.emptyAsG = chkEmptyAsG.checked;
+      this.getActiveExam().emptyAsG = chkEmptyAsG.checked;
       this.saveState();
     });
 
     chkSortByName.addEventListener('change', () => {
-      this.state.examConfig.sortByName = chkSortByName.checked;
+      this.getActiveExam().sortByName = chkSortByName.checked;
       this.saveState();
       this.renderResults();
     });
@@ -163,7 +255,7 @@ class OpenMCRApp {
       this.switchTab('scanner');
     });
 
-    // 3. Initialize Child Components
+    // 4. Initialize Child Components
     this.ui.keyEditor = initKeyEditor(this);
     this.ui.scanner = initScanner(this);
     this.ui.inspector = initInspector(this);
@@ -172,18 +264,190 @@ class OpenMCRApp {
     this.ui.firebaseModal = initFirebaseModal(this);
     this.ui.sheetViewer = initSheetViewer(this);
 
-    // 4. Restore Full-Resolution Scanned Images from IndexedDB
+    // 5. Restore Exams & Submissions from IndexedDB
     try {
+      const storedExams = await loadExamsFromDB();
+      if (storedExams && storedExams.length > 0) {
+        this.state.exams = storedExams;
+        if (!this.state.exams.some(e => e.id === this.state.activeExamId)) {
+          this.state.activeExamId = this.state.exams[0].id;
+        }
+      }
+
       const storedSubs = await loadSubmissionsFromDB();
       if (storedSubs && storedSubs.length > 0) {
         this.state.submissions = storedSubs;
       }
     } catch (e) {
-      console.warn("Could not load stored submissions from IndexedDB:", e);
+      console.warn("Could not restore data from IndexedDB:", e);
     }
 
-    // Initial render
+    this.syncActiveExamToInputs();
     this.renderAll();
+  }
+
+  syncActiveExamToInputs() {
+    const active = this.getActiveExam();
+    const inputExamName = document.getElementById('inputExamName');
+    const selectVariant = document.getElementById('selectFormVariant');
+    const inputCourseId = document.getElementById('inputCourseId');
+    const chkMultiAsF = document.getElementById('chkMultiAsF');
+    const chkEmptyAsG = document.getElementById('chkEmptyAsG');
+    const chkSortByName = document.getElementById('chkSortByName');
+
+    if (inputExamName) inputExamName.value = active.name || '';
+    if (selectVariant) selectVariant.value = active.variant || '75';
+    if (inputCourseId) inputCourseId.value = active.courseId || '';
+    if (chkMultiAsF) chkMultiAsF.checked = Boolean(active.multiAsF);
+    if (chkEmptyAsG) chkEmptyAsG.checked = Boolean(active.emptyAsG);
+    if (chkSortByName) chkSortByName.checked = Boolean(active.sortByName);
+
+    this.renderExamBar();
+    this.renderAllExamsTable();
+  }
+
+  createExam(title, variant = '75', courseId = '') {
+    const numQ = variant === '150' ? 150 : 75;
+    const newExam = {
+      id: `exam_${Date.now()}`,
+      name: (title || 'New Exam').trim(),
+      variant,
+      courseId,
+      multiAsF: false,
+      emptyAsG: false,
+      sortByName: true,
+      answerKeys: {
+        '*': Array(numQ).fill('A'),
+        'A': Array(numQ).fill('A')
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    this.state.exams.push(newExam);
+    this.state.activeExamId = newExam.id;
+    this.saveState();
+    this.syncActiveExamToInputs();
+    if (this.ui.keyEditor) this.ui.keyEditor.renderKeyMatrix();
+    this.renderAll();
+  }
+
+  switchExam(examId) {
+    if (!this.state.exams.some(e => e.id === examId)) return;
+    this.state.activeExamId = examId;
+    this.state.selectedScanId = null;
+    this.saveState();
+    this.syncActiveExamToInputs();
+    if (this.ui.keyEditor) this.ui.keyEditor.renderKeyMatrix();
+    this.renderAll();
+  }
+
+  renameActiveExam(newTitle) {
+    const active = this.getActiveExam();
+    active.name = (newTitle || active.name).trim();
+    active.updatedAt = new Date().toISOString();
+    this.state.submissions.forEach(s => {
+      if (s.examId === active.id) {
+        s.examName = active.name;
+      }
+    });
+    this.saveState();
+    this.syncActiveExamToInputs();
+    this.renderAll();
+  }
+
+  deleteActiveExam(examIdToDelete = null) {
+    const targetId = examIdToDelete || this.state.activeExamId;
+    if (this.state.exams.length <= 1) {
+      alert("Cannot delete the only exam session. Create another exam first.");
+      return;
+    }
+    const targetExam = this.state.exams.find(e => e.id === targetId);
+    if (!targetExam) return;
+
+    const count = this.state.submissions.filter(s => s.examId === targetExam.id).length;
+    if (!confirm(`Delete exam "${targetExam.name}" and all its ${count} scanned sheets?`)) return;
+
+    const deletedSubIds = this.state.submissions.filter(s => s.examId === targetExam.id).map(s => s.id);
+    deletedSubIds.forEach(id => deleteSubmissionFromDB(id));
+    this.state.submissions = this.state.submissions.filter(s => s.examId !== targetExam.id);
+    this.state.exams = this.state.exams.filter(e => e.id !== targetExam.id);
+
+    if (this.state.activeExamId === targetExam.id) {
+      this.state.activeExamId = this.state.exams[0].id;
+      this.state.selectedScanId = null;
+    }
+
+    this.saveState();
+    this.syncActiveExamToInputs();
+    if (this.ui.keyEditor) this.ui.keyEditor.renderKeyMatrix();
+    this.renderAll();
+  }
+
+  renderExamBar() {
+    const select = document.getElementById('selectActiveExam');
+    const sheetCountBadge = document.getElementById('activeExamSheetCount');
+    const variantBadge = document.getElementById('activeExamVariantBadge');
+    const mainVariantBadge = document.getElementById('examVariantBadge');
+    const active = this.getActiveExam();
+
+    if (select) {
+      select.innerHTML = '';
+      this.state.exams.forEach(exam => {
+        const count = this.state.submissions.filter(s => s.examId === exam.id).length;
+        const opt = document.createElement('option');
+        opt.value = exam.id;
+        opt.textContent = `${exam.name} (${count} sheets)`;
+        if (exam.id === this.state.activeExamId) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
+    const activeCount = this.getActiveSubmissions().length;
+    if (sheetCountBadge) sheetCountBadge.textContent = `${activeCount} Sheets`;
+    if (variantBadge) variantBadge.textContent = active.variant === '150' ? '150 Questions' : '75 Questions';
+    if (mainVariantBadge) mainVariantBadge.textContent = active.variant === '150' ? '150 Questions' : '75 Questions';
+  }
+
+  renderAllExamsTable() {
+    const tbody = document.getElementById('allExamsTableBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    this.state.exams.forEach(exam => {
+      const examSubs = this.state.submissions.filter(s => s.examId === exam.id && !s.error);
+      const avgScore = examSubs.length > 0
+        ? (examSubs.reduce((sum, s) => sum + (s.score || 0), 0) / examSubs.length).toFixed(1) + '%'
+        : '—';
+      const isActive = (exam.id === this.state.activeExamId);
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${exam.name}</strong> ${isActive ? '<span class="badge badge-mint" style="margin-left: 0.25rem;">Active</span>' : ''}</td>
+        <td><code>${exam.courseId || '-'}</code></td>
+        <td><span class="badge badge-slate">${exam.variant === '150' ? '150Q' : '75Q'}</span></td>
+        <td><strong>${examSubs.length}</strong> sheets</td>
+        <td>${avgScore}</td>
+        <td><span style="font-size: 0.75rem; color: var(--text-secondary);">${new Date(exam.updatedAt || exam.createdAt).toLocaleDateString()}</span></td>
+        <td>
+          <div style="display: flex; gap: 0.35rem;">
+            ${!isActive ? `<button class="btn btn-sm btn-primary btn-switch-exam" data-id="${exam.id}">Switch</button>` : ''}
+            <button class="btn btn-sm btn-subtle btn-delete-exam-row" data-id="${exam.id}" style="color: var(--pastel-rose-text);">🗑️</button>
+          </div>
+        </td>
+      `;
+
+      const btnSwitch = tr.querySelector('.btn-switch-exam');
+      if (btnSwitch) {
+        btnSwitch.addEventListener('click', () => this.switchExam(exam.id));
+      }
+
+      const btnDelete = tr.querySelector('.btn-delete-exam-row');
+      if (btnDelete) {
+        btnDelete.addEventListener('click', () => this.deleteActiveExam(exam.id));
+      }
+
+      tbody.appendChild(tr);
+    });
   }
 
   switchTab(tabId) {
@@ -209,10 +473,11 @@ class OpenMCRApp {
   }
 
   getAnswersForForm(formCode) {
+    const active = this.getActiveExam();
     const code = (formCode || '').trim().toUpperCase();
-    if (this.state.answerKeys[code]) return this.state.answerKeys[code];
-    if (this.state.answerKeys['*']) return this.state.answerKeys['*'];
-    return Object.values(this.state.answerKeys)[0] || [];
+    if (active.answerKeys[code]) return active.answerKeys[code];
+    if (active.answerKeys['*']) return active.answerKeys['*'];
+    return Object.values(active.answerKeys)[0] || [];
   }
 
   getActiveAnswerKey(formCode) {
@@ -220,12 +485,14 @@ class OpenMCRApp {
   }
 
   scoreExtractedData(data) {
-    return scoreSubmission(data, this.state.answerKeys);
+    const active = this.getActiveExam();
+    return scoreSubmission(data, active.answerKeys);
   }
 
   recalculateAllScores() {
+    const active = this.getActiveExam();
     this.state.submissions.forEach(sub => {
-      if (!sub.error && sub.answers) {
+      if (sub.examId === active.id && !sub.error && sub.answers) {
         const scored = this.scoreExtractedData(sub);
         sub.score = scored.percentage;
         sub.points = scored.points;
@@ -244,7 +511,7 @@ class OpenMCRApp {
   deleteSubmission(id) {
     this.state.submissions = this.state.submissions.filter(s => s.id !== id);
     if (this.state.selectedScanId === id) {
-      this.state.selectedScanId = this.state.submissions[0] ? this.state.submissions[0].id : null;
+      this.state.selectedScanId = this.getActiveSubmissions()[0] ? this.getActiveSubmissions()[0].id : null;
     }
     deleteSubmissionFromDB(id);
     this.saveState();
@@ -252,9 +519,11 @@ class OpenMCRApp {
   }
 
   clearAllSubmissions() {
-    this.state.submissions = [];
+    const active = this.getActiveExam();
+    const deletedSubIds = this.state.submissions.filter(s => s.examId === active.id).map(s => s.id);
+    deletedSubIds.forEach(id => deleteSubmissionFromDB(id));
+    this.state.submissions = this.state.submissions.filter(s => s.examId !== active.id);
     this.state.selectedScanId = null;
-    clearSubmissionsFromDB();
     this.saveState();
     this.renderAll();
   }
@@ -276,6 +545,8 @@ class OpenMCRApp {
   }
 
   renderAll() {
+    this.renderExamBar();
+    this.renderAllExamsTable();
     if (this.ui.scanner) this.ui.scanner.renderBatchTable();
     this.renderGallery();
     this.renderResults();
@@ -289,4 +560,3 @@ window.addEventListener('DOMContentLoaded', () => {
   window.openMcrApp = new OpenMCRApp();
   window.openMcrApp.init();
 });
-

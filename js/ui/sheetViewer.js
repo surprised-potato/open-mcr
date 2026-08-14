@@ -9,6 +9,7 @@ export function initSheetViewer(app) {
   const inputSearchGallery = document.getElementById('inputSearchGallery');
   const selectSortGallery = document.getElementById('selectSortGallery');
   const selectFilterGallery = document.getElementById('selectFilterGallery');
+  const selectFilterExamGallery = document.getElementById('selectFilterExamGallery');
 
   // Fullscreen Viewer Modal Elements
   const modal = document.getElementById('modalSheetViewer');
@@ -52,13 +53,20 @@ export function initSheetViewer(app) {
     const query = (inputSearchGallery ? inputSearchGallery.value : '').trim().toLowerCase();
     const filter = selectFilterGallery ? selectFilterGallery.value : 'all';
     const sort = selectSortGallery ? selectSortGallery.value : 'name';
+    const examFilter = selectFilterExamGallery ? selectFilterExamGallery.value : 'current';
+
+    if (examFilter === 'current') {
+      const active = app.getActiveExam();
+      list = list.filter(s => !s.examId || s.examId === active.id);
+    }
 
     if (query) {
       list = list.filter(s =>
         (s.studentName && s.studentName.toLowerCase().includes(query)) ||
         (s.studentId && s.studentId.toLowerCase().includes(query)) ||
         (s.filename && s.filename.toLowerCase().includes(query)) ||
-        (s.testFormCode && s.testFormCode.toLowerCase().includes(query))
+        (s.testFormCode && s.testFormCode.toLowerCase().includes(query)) ||
+        (s.examName && s.examName.toLowerCase().includes(query))
       );
     }
 
@@ -107,6 +115,9 @@ export function initSheetViewer(app) {
     }
 
     galleryGrid.innerHTML = '';
+    const activeExam = app.getActiveExam();
+    const isViewingAll = (selectFilterExamGallery && selectFilterExamGallery.value === 'all');
+
     list.forEach((sub, idx) => {
       const card = document.createElement('div');
       card.className = 'sheet-card card';
@@ -121,6 +132,7 @@ export function initSheetViewer(app) {
       const scoreText = isErr ? 'Error' : `${sub.score !== undefined ? sub.score + '%' : 'Graded'}`;
 
       const thumbUrl = sub.imageDataUrl || 'assets/sample_exam_scan.png';
+      const examName = sub.examName || (app.state.exams.find(e => e.id === sub.examId) || activeExam).name;
 
       card.innerHTML = `
         <div style="position: relative; width: 100%; height: 210px; background: #0f172a; border-radius: var(--radius-sm); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer;" class="sheet-thumb-wrap">
@@ -128,8 +140,9 @@ export function initSheetViewer(app) {
           <div style="position: absolute; top: 0.5rem; right: 0.5rem;">
             <span class="badge ${scoreBadgeClass}">${scoreText}</span>
           </div>
-          <div style="position: absolute; bottom: 0.5rem; left: 0.5rem;">
+          <div style="position: absolute; bottom: 0.5rem; left: 0.5rem; display: flex; gap: 0.25rem;">
             <span class="badge badge-slate">Form ${sub.testFormCode || '-'}</span>
+            ${isViewingAll ? `<span class="badge badge-sky" style="font-size: 0.7rem;">${examName}</span>` : ''}
           </div>
           <div class="thumb-hover-overlay" style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease;">
             <button class="btn btn-sm btn-primary">🔍 View Sheet</button>
@@ -458,6 +471,7 @@ export function initSheetViewer(app) {
   if (inputSearchGallery) inputSearchGallery.addEventListener('input', renderGallery);
   if (selectSortGallery) selectSortGallery.addEventListener('change', renderGallery);
   if (selectFilterGallery) selectFilterGallery.addEventListener('change', renderGallery);
+  if (selectFilterExamGallery) selectFilterExamGallery.addEventListener('change', renderGallery);
 
   return {
     renderGallery,

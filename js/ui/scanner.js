@@ -182,14 +182,17 @@ export function initScanner(app) {
           finalDataUrl = await rotateDataUrl(task.dataUrl, scanResult.rotation);
         }
 
+        const activeExam = app.getActiveExam();
         const submission = {
           id: `scan_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          examId: activeExam.id,
+          examName: activeExam.name,
           filename: task.filename,
           imageDataUrl: finalDataUrl,
           studentId: scanResult.studentId || 'Unknown',
           studentName: scanResult.studentName || 'Unknown',
           testFormCode: scanResult.testFormCode || 'A',
-          courseId: scanResult.courseId || '',
+          courseId: scanResult.courseId || activeExam.courseId || '',
           answers: scanResult.answers,
           threshold: scanResult.threshold,
           score: scored.percentage,
@@ -212,8 +215,11 @@ export function initScanner(app) {
         renderBatchTable();
       } catch (err) {
         console.error("Scan error on", task.filename, err);
+        const activeExam = app.getActiveExam();
         const failedSub = {
           id: `scan_${Date.now()}_${Math.random().toString(36).substr(2, 6)}_failed`,
+          examId: activeExam.id,
+          examName: activeExam.name,
           filename: task.filename,
           imageDataUrl: task.dataUrl,
           studentId: 'ERROR',
@@ -336,7 +342,7 @@ export function initScanner(app) {
   }
 
   function renderBatchTable() {
-    const list = app.state.submissions;
+    const list = app.getActiveSubmissions();
     batchCount.textContent = list.length;
 
     if (list.length === 0) {

@@ -36,7 +36,8 @@ export function initInspector(app) {
 
   function populateSelector() {
     selectSub.innerHTML = '<option value="">Select a scanned sheet...</option>';
-    app.state.submissions.forEach((sub, idx) => {
+    const list = app.getActiveSubmissions();
+    list.forEach((sub, idx) => {
       const opt = document.createElement('option');
       opt.value = sub.id;
       const statusText = sub.error ? `⚠️ Error (${sub.error})` : `${sub.score !== undefined ? sub.score + '%' : 'Graded'}`;

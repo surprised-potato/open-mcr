@@ -13,10 +13,11 @@ export function initResultsTable(app) {
 
   function renderResults() {
     const query = (searchInput.value || '').trim().toLowerCase();
-    let submissions = [...app.state.submissions].filter(s => !s.error);
+    const activeExam = app.getActiveExam();
+    let submissions = app.getActiveSubmissions().filter(s => !s.error);
 
     // Apply sorting
-    if (app.state.examConfig.sortByName) {
+    if (activeExam.sortByName) {
       submissions.sort((a, b) => (a.studentName || '').localeCompare(b.studentName || ''));
     } else {
       submissions.sort((a, b) => (a.studentId || '').localeCompare(b.studentId || ''));
@@ -35,13 +36,13 @@ export function initResultsTable(app) {
     if (submissions.length === 0) {
       tableBody.innerHTML = `
         <tr>
-          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No graded results to display.</td>
+          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No graded results for "${activeExam.name}".</td>
         </tr>`;
       return;
     }
 
     tableBody.innerHTML = '';
-    const numQ = app.state.examConfig.variant === '150' ? 150 : 75;
+    const numQ = activeExam.variant === '150' ? 150 : 75;
 
     submissions.forEach(sub => {
       const tr = document.createElement('tr');
@@ -79,20 +80,22 @@ export function initResultsTable(app) {
   searchInput.addEventListener('input', renderResults);
 
   btnExportExcel.addEventListener('click', () => {
-    const numQ = app.state.examConfig.variant === '150' ? 150 : 75;
+    const activeExam = app.getActiveExam();
+    const numQ = activeExam.variant === '150' ? 150 : 75;
     exportToExcel(
-      app.state.examConfig.name,
-      app.state.submissions.filter(s => !s.error),
-      app.state.answerKeys,
+      activeExam.name,
+      app.getActiveSubmissions().filter(s => !s.error),
+      activeExam.answerKeys,
       numQ
     );
   });
 
   btnExportCsv.addEventListener('click', () => {
-    const numQ = app.state.examConfig.variant === '150' ? 150 : 75;
+    const activeExam = app.getActiveExam();
+    const numQ = activeExam.variant === '150' ? 150 : 75;
     exportToCSV(
-      app.state.examConfig.name,
-      app.state.submissions.filter(s => !s.error),
+      activeExam.name,
+      app.getActiveSubmissions().filter(s => !s.error),
       numQ
     );
   });

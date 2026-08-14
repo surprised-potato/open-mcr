@@ -47,6 +47,23 @@
   <!-- Main Content Container -->
   <main class="main-container">
 
+    <!-- Exam Title Selector & Session Bar -->
+    <div class="exam-session-bar" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 1.25rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+      <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+        <span style="font-weight: 700; font-size: 0.9rem; color: var(--text-main); display: flex; align-items: center; gap: 0.35rem;">
+          📚 Active Exam:
+        </span>
+        <select id="selectActiveExam" class="form-select" style="min-width: 240px; font-weight: 600;"></select>
+        <button class="btn btn-sm btn-primary" id="btnNewExamPrompt">➕ New Exam</button>
+        <button class="btn btn-sm btn-subtle" id="btnRenameExam" title="Rename active exam title">✏️ Rename</button>
+        <button class="btn btn-sm btn-subtle" id="btnDeleteExam" style="color: var(--pastel-rose-text);" title="Delete current exam">🗑️ Delete</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span class="badge badge-mint" id="activeExamSheetCount">0 Sheets</span>
+        <span class="badge badge-sky" id="activeExamVariantBadge">75 Questions</span>
+      </div>
+    </div>
+
     <!-- 1. EXAM SETUP PANE -->
     <section class="tab-pane active" id="pane-setup">
       <div class="card">
@@ -106,6 +123,33 @@
           <button class="btn btn-primary" id="btnProceedToKeys">Save & Proceed to Answer Keys →</button>
         </div>
       </div>
+
+      <!-- All Saved Exams Table in Setup -->
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+          <div>
+            <h3 class="card-title" style="font-size: 1.05rem;">All Saved Exam Sessions</h3>
+            <p class="card-subtitle">Manage and switch between multiple exams, quizzes, and classes</p>
+          </div>
+          <button class="btn btn-sm btn-primary" id="btnNewExamInSetup">➕ Create New Exam</button>
+        </div>
+        <div class="table-container">
+          <table class="data-table" id="allExamsTable">
+            <thead>
+              <tr>
+                <th>Exam Title</th>
+                <th>Course ID</th>
+                <th>Variant</th>
+                <th>Total Sheets</th>
+                <th>Class Avg</th>
+                <th>Last Modified</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="allExamsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- 2. ANSWER KEYS PANE -->
@@ -145,10 +189,8 @@
           </div>
         </div>
 
-        <!-- Question Bubble Matrix -->
-        <div class="key-matrix-grid" id="keyMatrixContainer">
-          <!-- Populated dynamically by JS -->
-        </div>
+        <!-- Matrix of 75 / 150 Key Questions -->
+        <div class="key-matrix-grid" id="keyMatrixContainer"></div>
 
         <div style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
           <span class="badge badge-sky" id="keyStatusSummary">75 / 75 Questions Answered</span>
@@ -240,9 +282,14 @@
 
         <!-- Gallery Toolbar -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
-          <input type="text" id="inputSearchGallery" class="form-input" placeholder="Search by student name, ID, or file..." style="max-width: 320px;">
+          <input type="text" id="inputSearchGallery" class="form-input" placeholder="Search by student name, ID, or file..." style="max-width: 300px;">
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-            <label style="font-size: 0.8rem; color: var(--text-secondary);">Filter:</label>
+            <label style="font-size: 0.8rem; color: var(--text-secondary);">Exam:</label>
+            <select id="selectFilterExamGallery" class="form-select" style="width: auto; min-width: 160px;">
+              <option value="current">Current Exam Only</option>
+              <option value="all">All Exams</option>
+            </select>
+            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.25rem;">Filter:</label>
             <select id="selectFilterGallery" class="form-select" style="width: auto; min-width: 120px;">
               <option value="all">All Sheets</option>
               <option value="graded">Graded Only</option>

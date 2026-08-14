@@ -4,8 +4,9 @@
  */
 
 const DB_NAME = 'OpenMCR_LocalDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_SUBMISSIONS = 'submissions';
+const STORE_EXAMS = 'exams';
 const STORE_CONFIG = 'config';
 
 let dbInstance = null;
@@ -26,6 +27,9 @@ function openDatabase() {
       if (!db.objectStoreNames.contains(STORE_SUBMISSIONS)) {
         db.createObjectStore(STORE_SUBMISSIONS, { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains(STORE_EXAMS)) {
+        db.createObjectStore(STORE_EXAMS, { keyPath: 'id' });
+      }
       if (!db.objectStoreNames.contains(STORE_CONFIG)) {
         db.createObjectStore(STORE_CONFIG, { keyPath: 'key' });
       }
@@ -41,6 +45,58 @@ function openDatabase() {
       resolve(null); // Fallback gracefully
     };
   });
+}
+
+export async function saveExamsToDB(exams) {
+  try {
+    const db = await openDatabase();
+    if (!db) return;
+
+    const tx = db.transaction([STORE_EXAMS], 'readwrite');
+    const store = tx.objectStore(STORE_EXAMS);
+
+    await new Promise((res, rej) => {
+      const clearReq = store.clear();
+      clearReq.onsuccess = res;
+      clearReq.onerror = rej;
+    });
+
+    for (const exam of exams) {
+      store.put(exam);
+    }
+
+    return new Promise((res, rej) => {
+      tx.oncomplete = res;
+      tx.onerror = rej;
+    });
+  } catch (err) {
+    console.warn("Error saving exams to IndexedDB:", err);
+  }
+}
+
+export async function loadExamsFromDB() {
+  try {
+    const db = await openDatabase();
+    if (!db) return [];
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_EXAMS], 'readonly');
+      const store = tx.objectStore(STORE_EXAMS);
+      const req = store.getAll();
+
+      req.onsuccess = () => {
+        resolve(req.result || []);
+      };
+
+      req.onerror = () => {
+        console.warn("Could not read exams from IndexedDB:", req.error);
+        resolve([]);
+      };
+    });
+  } catch (err) {
+    console.warn("Error loading exams from IndexedDB:", err);
+    return [];
+  }
 }
 
 export async function saveSubmissionsToDB(submissions) {
