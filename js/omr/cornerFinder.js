@@ -323,6 +323,47 @@ export function findCornerMarks(cv, imageMat) {
       for (const mult of toleranceMultipliers) {
         try {
           const result = findCornerMarksFromPolygons(allPolygons, mult);
+          const [tl, tr] = result.corners;
+          const angleDeg = Math.atan2(tr.y - tl.y, tr.x - tl.x) * (180 / Math.PI);
+
+          let additionalRot = null;
+          if (angleDeg >= 45 && angleDeg < 135) {
+            additionalRot = cv.ROTATE_90_COUNTERCLOCKWISE;
+          } else if (angleDeg >= 135 || angleDeg < -135) {
+            additionalRot = cv.ROTATE_180;
+          } else if (angleDeg >= -135 && angleDeg < -45) {
+            additionalRot = cv.ROTATE_90_CLOCKWISE;
+          }
+
+          if (additionalRot !== null) {
+            let combinedMat = new cv.Mat();
+            cv.rotate(mat, combinedMat, additionalRot);
+            const uprightContours = extractContours(cv, combinedMat);
+            const uprightPolys = contoursToPolygons(cv, uprightContours, eps);
+            const uprightResult = findCornerMarksFromPolygons(uprightPolys, mult);
+            uprightContours.delete();
+            combinedMat.delete();
+            contours.delete();
+            if (rotation !== null) mat.delete();
+
+            let totalRot = 0;
+            if (rotation === cv.ROTATE_90_CLOCKWISE) totalRot += 90;
+            else if (rotation === cv.ROTATE_180) totalRot += 180;
+            else if (rotation === cv.ROTATE_90_COUNTERCLOCKWISE) totalRot += 270;
+
+            if (additionalRot === cv.ROTATE_90_CLOCKWISE) totalRot += 90;
+            else if (additionalRot === cv.ROTATE_180) totalRot += 180;
+            else if (additionalRot === cv.ROTATE_90_COUNTERCLOCKWISE) totalRot += 270;
+
+            totalRot = (totalRot % 360 + 360) % 360;
+            let finalRotCode = null;
+            if (totalRot === 90) finalRotCode = cv.ROTATE_90_CLOCKWISE;
+            else if (totalRot === 180) finalRotCode = cv.ROTATE_180;
+            else if (totalRot === 270) finalRotCode = cv.ROTATE_90_COUNTERCLOCKWISE;
+
+            return { ...uprightResult, rotation: finalRotCode };
+          }
+
           contours.delete();
           if (rotation !== null) {
             mat.delete();
