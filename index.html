@@ -321,8 +321,11 @@
             <h2 class="card-title">Visual Sheet Inspector</h2>
             <p class="card-subtitle">Inspect detected alignment corners, bubble fill levels, and scored answers</p>
           </div>
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <select id="selectInspectSubmission" class="form-select" style="min-width: 200px;">
+          <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+            <button class="btn btn-sm" id="btnInspectPrevSheet" title="Previous Sheet (Left Arrow Key)">◀ Prev</button>
+            <span id="inspectIndexTracker" style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); padding: 0 0.25rem; white-space: nowrap;">0 / 0</span>
+            <button class="btn btn-sm" id="btnInspectNextSheet" title="Next Sheet (Right Arrow Key)">Next ▶</button>
+            <select id="selectInspectSubmission" class="form-select" style="min-width: 220px;">
               <option value="">Select a scanned sheet...</option>
             </select>
           </div>

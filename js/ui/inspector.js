@@ -28,11 +28,29 @@ export function initInspector(app) {
   const thresholdBadgeEl = document.getElementById('inspectThresholdBadge');
   const qListEl = document.getElementById('inspectorQuestionList');
 
+  // Navigation Arrows & Tracker
+  const btnPrev = document.getElementById('btnInspectPrevSheet');
+  const btnNext = document.getElementById('btnInspectNextSheet');
+  const indexTracker = document.getElementById('inspectIndexTracker');
+
   let currentImage = null;
   let zoomScale = 1.0;
   let isEditingCorners = false;
-  let activeCorners = null; // Array of 4 points: [TL, TR, BR, BL]
+  activeCorners = null; // Array of 4 points: [TL, TR, BR, BL]
   let draggingCornerIdx = -1;
+
+  function navigateSheet(delta) {
+    const list = app.getActiveSubmissions();
+    if (list.length === 0) return;
+    let currentIndex = list.findIndex(s => s.id === app.state.selectedScanId);
+    if (currentIndex === -1) currentIndex = 0;
+    const newIndex = Math.max(0, Math.min(list.length - 1, currentIndex + delta));
+    if (list[newIndex]) {
+      app.state.selectedScanId = list[newIndex].id;
+      isEditingCorners = false;
+      renderInspector();
+    }
+  }
 
   function populateSelector() {
     selectSub.innerHTML = '<option value="">Select a scanned sheet...</option>';
@@ -90,6 +108,22 @@ export function initInspector(app) {
   async function renderInspector() {
     populateSelector();
     renderCornerLogsUI();
+    const list = app.getActiveSubmissions();
+    const currentIndex = list.findIndex(s => s.id === app.state.selectedScanId);
+
+    // Update Index Tracker and Arrow button states
+    if (indexTracker) {
+      if (list.length === 0) {
+        indexTracker.textContent = '0 / 0';
+      } else if (currentIndex === -1) {
+        indexTracker.textContent = `- / ${list.length}`;
+      } else {
+        indexTracker.textContent = `${currentIndex + 1} / ${list.length}`;
+      }
+    }
+    if (btnPrev) btnPrev.disabled = (currentIndex <= 0 || list.length === 0);
+    if (btnNext) btnNext.disabled = (currentIndex === -1 || currentIndex >= list.length - 1 || list.length === 0);
+
     const sub = getSelectedSubmission();
 
     if (!sub) {
@@ -731,9 +765,25 @@ ${JSON.stringify({
     drawCanvas();
   });
 
-  document.getElementById('btnZoomReset').addEventListener('click', () => {
-    zoomScale = 1.0;
-    drawCanvas();
+  if (btnPrev) btnPrev.addEventListener('click', () => navigateSheet(-1));
+  if (btnNext) btnNext.addEventListener('click', () => navigateSheet(1));
+
+  // Keyboard navigation when inspector tab is active
+  window.addEventListener('keydown', (e) => {
+    const inspectorPane = document.getElementById('pane-inspector');
+    if (!inspectorPane || !inspectorPane.classList.contains('active')) return;
+    
+    // Ignore if typing in input, select, textarea, etc.
+    const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+    if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      navigateSheet(-1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      navigateSheet(1);
+    }
   });
 
   return {
