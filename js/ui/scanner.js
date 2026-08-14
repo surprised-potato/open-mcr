@@ -21,7 +21,7 @@ export function initScanner(app) {
   function initWorker() {
     if (worker) return worker;
     try {
-      worker = new Worker('js/omr/worker.js', { type: 'module' });
+      worker = new Worker(`js/omr/worker.js?t=${Date.now()}`, { type: 'module' });
       worker.postMessage({ id: 'init', type: 'INIT' });
     } catch (err) {
       console.warn("Could not start Web Worker module:", err);

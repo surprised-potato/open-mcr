@@ -48,7 +48,7 @@ let pipelineModule = null;
 
 async function getPipeline() {
   if (!pipelineModule) {
-    pipelineModule = await import('./pipeline.js');
+    pipelineModule = await import(`./pipeline.js?t=${Date.now()}`);
   }
   return pipelineModule;
 }
