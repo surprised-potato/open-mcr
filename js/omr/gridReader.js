@@ -228,10 +228,29 @@ export function decodeFieldValue(fills, threshold, fieldsType, multiAsF = false)
 
   for (let f = 0; f < fills.length; f++) {
     const subFills = fills[f];
+    if (!subFills || subFills.length === 0) {
+      chars.push(' ');
+      continue;
+    }
+
+    // Compute column baseline (median fill of this subfield column)
+    const sortedFills = subFills.slice().sort((a, b) => a - b);
+    const colMedian = sortedFills[Math.floor(sortedFills.length * 0.5)];
+
+    const indexed = subFills.map((val, idx) => ({ val, idx })).sort((a, b) => b.val - a.val);
+    const top1 = indexed[0];
+    const top2 = indexed.length > 1 ? indexed[1] : null;
+
+    // Minimum darkness required for a filled bubble in this column
+    const minFillDarkness = Math.max(threshold * 0.90, colMedian + 0.055);
+
     const filledIndexes = [];
-    for (let i = 0; i < subFills.length; i++) {
-      if (subFills[i] > threshold) {
-        filledIndexes.push(i);
+    if (top1 && top1.val >= minFillDarkness) {
+      if (!top2 || top1.val >= top2.val + 0.035 || top1.val >= colMedian + 0.085) {
+        filledIndexes.push(top1.idx);
+      } else if (top2 && top2.val >= minFillDarkness) {
+        // Genuinely multiple marked
+        filledIndexes.push(top1.idx, top2.idx);
       }
     }
 
