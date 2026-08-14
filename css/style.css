@@ -691,3 +691,141 @@ body {
   transform: scale(1.04);
 }
 
+/* Analytics Dashboard Visualizations */
+.hist-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  height: 100%;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.hist-bar-outer {
+  width: 100%;
+  max-width: 48px;
+  height: 120px;
+  background-color: var(--bg-card-subtle, #f1f5f9);
+  border-radius: var(--radius-sm, 6px) var(--radius-sm, 6px) 0 0;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  position: relative;
+}
+
+.hist-bar-inner {
+  width: 100%;
+  transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: var(--radius-sm, 6px) var(--radius-sm, 6px) 0 0;
+}
+
+.hist-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.hist-label {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Heatmap Grid Chips */
+.heatmap-chip {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  position: relative;
+  user-select: none;
+}
+
+.heatmap-chip:hover {
+  transform: translateY(-2px) scale(1.08);
+  box-shadow: var(--shadow-md);
+  z-index: 5;
+  filter: brightness(1.1);
+}
+
+.heatmap-chip.selected {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.heatmap-chip .q-sub {
+  font-size: 0.6rem;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* Distractor Stacked Visual Bar */
+.distractor-stack {
+  display: flex;
+  width: 100%;
+  height: 22px;
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background-color: var(--bg-card-subtle, #f1f5f9);
+  border: 1px solid var(--border-color);
+}
+
+.distractor-segment {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #ffffff;
+  transition: width 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  cursor: default;
+}
+
+.distractor-segment.correct-key {
+  background-color: #10b981;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.distractor-segment.trap {
+  background-color: #ef4444;
+}
+
+.distractor-segment.standard-distractor {
+  background-color: #64748b;
+}
+
+.distractor-segment.empty-distractor {
+  background-color: #cbd5e1;
+  color: #475569;
+  text-shadow: none;
+}
+
+.distractor-segment:hover {
+  filter: brightness(1.15);
+}
+
+/* Filter Pill Buttons */
+.filter-pill {
+  transition: all 0.15s ease;
+}
+
+.filter-pill.active {
+  background-color: var(--primary) !important;
+  color: #ffffff !important;
+  box-shadow: var(--shadow-sm);
+}
+

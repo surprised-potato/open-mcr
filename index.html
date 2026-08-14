@@ -456,7 +456,7 @@
     <!-- 7. ANALYTICS PANE -->
     <section class="tab-pane" id="pane-analytics">
       <!-- Stats Overview Cards -->
-      <div class="stats-grid">
+      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 1.25rem;">
         <div class="stat-card">
           <div class="stat-label">Total Graded</div>
           <div class="stat-value" id="statTotalGraded">0</div>
@@ -466,21 +466,83 @@
           <div class="stat-value" id="statClassAverage">0.0%</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Passing Rate (≥50%)</div>
-          <div class="stat-value" id="statPassingRate">0.0%</div>
+          <div class="stat-label">Standard Dev (σ)</div>
+          <div class="stat-value" id="statStdDev">0.0</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Median Score</div>
           <div class="stat-value" id="statMedian">0.0%</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-label">Passing Rate (≥50%)</div>
+          <div class="stat-value" id="statPassingRate">0.0%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label" title="Kuder-Richardson Formula 20 (Internal Test Consistency)">KR-20 Reliability</div>
+          <div class="stat-value" id="statKR20">0.00</div>
+        </div>
+      </div>
+
+      <!-- Score Distribution Histogram & Summary Insights -->
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Score Distribution & Test Insights</h2>
+            <p class="card-subtitle">Visual frequency distribution of student scores across the cohort</p>
+          </div>
+          <div id="analyticsInsightsBadges" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+        </div>
+
+        <div id="scoreHistogramContainer" style="padding: 1rem 0; min-height: 180px; display: flex; align-items: flex-end; justify-content: space-between; gap: 0.5rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;">
+          <p style="width: 100%; text-align: center; color: var(--text-muted);">No graded scores available for distribution chart.</p>
+        </div>
+
+        <div id="analyticsKeyInsights" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Birds-Eye Question Heatmap Card -->
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 class="card-title">Birds-Eye Question Heatmap Matrix</h2>
+            <p class="card-subtitle">Click any question chip to inspect its difficulty, discrimination, and distractors</p>
+          </div>
+          <div class="filter-pills" id="heatmapFilterPills" style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-primary filter-pill active" data-filter="all">All Questions (<span id="countPillAll">0</span>)</button>
+            <button class="btn btn-sm btn-subtle filter-pill" data-filter="flagged" style="color: var(--pastel-rose-text);">🚨 Check Key (<span id="countPillFlagged">0</span>)</button>
+            <button class="btn btn-sm btn-subtle filter-pill" data-filter="low_discrim">⚠️ Low Discrim (<span id="countPillLowDiscrim">0</span>)</button>
+            <button class="btn btn-sm btn-subtle filter-pill" data-filter="hard">🔥 Hardest &lt;40% (<span id="countPillHard">0</span>)</button>
+            <button class="btn btn-sm btn-subtle filter-pill" data-filter="mastered" style="color: var(--pastel-mint-text);">⭐ High Mastery (<span id="countPillMastered">0</span>)</button>
+          </div>
+        </div>
+
+        <!-- Heatmap Grid -->
+        <div id="questionHeatmapGrid" class="heatmap-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 0.4rem; padding: 0.5rem 0;">
+          <p style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 1rem;">Scan sheets to populate question heatmap matrix.</p>
+        </div>
+
+        <!-- Heatmap Legend -->
+        <div style="display: flex; gap: 1.25rem; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.75rem; flex-wrap: wrap; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+          <span style="display: flex; align-items: center; gap: 0.35rem;"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: #10b981;"></span> High Mastery (&gt;75%)</span>
+          <span style="display: flex; align-items: center; gap: 0.35rem;"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: #0ea5e9;"></span> Optimal (50-75%)</span>
+          <span style="display: flex; align-items: center; gap: 0.35rem;"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: #f59e0b;"></span> Challenging (30-50%)</span>
+          <span style="display: flex; align-items: center; gap: 0.35rem;"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: #ef4444;"></span> Very Hard (&lt;30%)</span>
+          <span style="display: flex; align-items: center; gap: 0.35rem;"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: #8b5cf6; border: 1px dashed #ffffff;"></span> 🚨 Negative D (Check Key)</span>
+        </div>
       </div>
 
       <!-- Item Analysis Table -->
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
           <div>
             <h2 class="card-title">Question Item Difficulty & Distractor Analysis</h2>
-            <p class="card-subtitle">Inspect % correct per question and option distribution to identify challenging test items</p>
+            <p class="card-subtitle">Classical Test Theory metrics: P-Value difficulty, Kelly's 27% discrimination index, and distractor choices</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <input type="text" id="inputSearchItemAnalysis" class="form-input" placeholder="Search question (e.g. 'Q12')..." style="max-width: 200px; padding: 0.3rem 0.6rem; font-size: 0.8rem;">
+            <button class="btn btn-sm btn-primary" id="btnExportItemAnalysisCsv">📄 Export Item Analysis CSV</button>
           </div>
         </div>
 
@@ -488,23 +550,18 @@
           <table class="data-table" id="itemAnalysisTable">
             <thead>
               <tr>
-                <th>Question</th>
-                <th>Key</th>
-                <th>% Correct</th>
-                <th>Top 10%</th>
-                <th>Bottom 10%</th>
-                <th>Discrim. Index</th>
-                <th>Count A</th>
-                <th>Count B</th>
-                <th>Count C</th>
-                <th>Count D</th>
-                <th>Count E</th>
-                <th>Blank / Multi</th>
+                <th style="width: 60px;">Item</th>
+                <th style="width: 50px;">Key</th>
+                <th style="min-width: 130px;">Difficulty (P-Value)</th>
+                <th style="min-width: 140px;" title="Kelly's 27% Rule: Top 27% minus Bottom 27%">Discrimination (D)</th>
+                <th style="width: 80px;" title="Point-Biserial Correlation (Item vs Total Score)">r(pbis)</th>
+                <th style="min-width: 260px;">Distractor Choice Distribution (A, B, C, D, E, Blank)</th>
+                <th style="min-width: 140px;">Diagnostic Status</th>
               </tr>
             </thead>
             <tbody id="itemAnalysisTableBody">
               <tr>
-                <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 2rem;">Scan exam sheets to generate item analysis.</td>
+                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Scan exam sheets to generate item analysis.</td>
               </tr>
             </tbody>
           </table>
