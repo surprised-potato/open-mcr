@@ -135,24 +135,61 @@ export class Grid {
 }
 
 /**
- * Calculates adaptive dynamic fill threshold across all bubbles
+ * Calculates adaptive dynamic fill threshold across all bubbles using 1D Otsu variance maximization
  */
 export function calculateBubbleFillThreshold(allFillPercents) {
-  const flattened = allFillPercents.flat(Infinity).sort((a, b) => a - b);
-  if (flattened.length === 0) return 0.35;
+  const flat = allFillPercents.flat(Infinity).filter(v => typeof v === 'number' && !isNaN(v)).sort((a, b) => a - b);
+  if (flat.length === 0) return 0.35;
 
-  const topChunkSize = Math.max(2, Math.round(flattened.length / 5));
-  const topChunk = flattened.slice(-topChunkSize);
+  // Discard top 0.5% extreme outliers (e.g. solid border artifacts, printed box lines)
+  const validCount = Math.floor(flat.length * 0.995);
+  const data = flat.slice(0, validCount);
 
-  const diffs = [];
-  for (let i = 0; i < topChunk.length - 1; i++) {
-    diffs.push(topChunk[i + 1] - topChunk[i]);
+  const min = data[0];
+  const max = data[data.length - 1];
+  if (max - min < 0.08) return min + 0.15;
+
+  const numBins = 100;
+  const hist = new Array(numBins).fill(0);
+  for (const v of data) {
+    const b = Math.min(numBins - 1, Math.floor(((v - min) / (max - min)) * numBins));
+    hist[b]++;
   }
 
-  if (diffs.length === 0) return 0.35;
-  const bestGapIdx = findGreatestValueIndexes(diffs, 1)[0];
-  const threshold = (topChunk[bestGapIdx] + topChunk[bestGapIdx + 1]) / 2;
-  return Math.max(0.15, Math.min(0.85, threshold));
+  const total = data.length;
+  let sum = 0;
+  for (let i = 0; i < numBins; i++) sum += i * hist[i];
+
+  let sumB = 0;
+  let wB = 0;
+  let maxVariance = 0;
+  let bestBin = 0;
+
+  for (let t = 0; t < numBins; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+
+    const betweenVariance = wB * wF * (mB - mF) * (mB - mF);
+    if (betweenVariance > maxVariance) {
+      maxVariance = betweenVariance;
+      bestBin = t;
+    }
+  }
+
+  const otsuVal = min + ((bestBin + 0.5) / numBins) * (max - min);
+
+  // Empty background median (50th percentile)
+  const medianEmpty = data[Math.floor(data.length * 0.5)];
+  // Clamp threshold so lighter pencil marks (e.g. 0.35-0.40) are reliably captured without capturing empty noise
+  const threshold = Math.min(otsuVal, medianEmpty + 0.09);
+
+  return Math.max(0.18, Math.min(0.70, threshold));
 }
 
 export function readFieldGroup(grid, groupInfo) {
