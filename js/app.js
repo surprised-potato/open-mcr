@@ -123,7 +123,9 @@ class OpenMCRApp {
 
   getActiveSubmissions() {
     const active = this.getActiveExam();
-    return this.state.submissions.filter(s => !s.examId || s.examId === active.id);
+    if (!active) return this.state.submissions;
+    const validExamIds = new Set(this.state.exams.map(e => e.id));
+    return this.state.submissions.filter(s => !s.examId || s.examId === active.id || !validExamIds.has(s.examId));
   }
 
   saveState() {
@@ -276,7 +278,15 @@ class OpenMCRApp {
 
       const storedSubs = await loadSubmissionsFromDB();
       if (storedSubs && storedSubs.length > 0) {
-        this.state.submissions = storedSubs;
+        const subMap = new Map();
+        for (const s of storedSubs) subMap.set(s.id, s);
+        for (const s of this.state.submissions) {
+          if (!subMap.has(s.id)) subMap.set(s.id, s);
+          else if (!subMap.get(s.id).imageDataUrl && s.imageDataUrl) {
+            subMap.set(s.id, { ...subMap.get(s.id), imageDataUrl: s.imageDataUrl });
+          }
+        }
+        this.state.submissions = Array.from(subMap.values());
       }
     } catch (e) {
       console.warn("Could not restore data from IndexedDB:", e);

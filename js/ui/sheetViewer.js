@@ -57,7 +57,8 @@ export function initSheetViewer(app) {
 
     if (examFilter === 'current') {
       const active = app.getActiveExam();
-      list = list.filter(s => !s.examId || s.examId === active.id);
+      const validExamIds = new Set(app.state.exams.map(e => e.id));
+      list = list.filter(s => !s.examId || s.examId === active.id || !validExamIds.has(s.examId));
     }
 
     if (query) {

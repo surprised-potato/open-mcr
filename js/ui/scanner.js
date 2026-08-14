@@ -252,9 +252,12 @@ export function initScanner(app) {
       progressContainer.style.display = 'none';
     }, 2000);
 
-    app.renderResults();
-    app.renderAnalytics();
-    app.renderInspector();
+    const activeSubs = app.getActiveSubmissions();
+    if ((!app.state.selectedScanId || !activeSubs.some(s => s.id === app.state.selectedScanId)) && activeSubs.length > 0) {
+      app.state.selectedScanId = activeSubs[0].id;
+    }
+
+    app.renderAll();
   }
 
   function readImageFile(file) {

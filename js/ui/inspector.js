@@ -106,9 +106,13 @@ export function initInspector(app) {
   }
 
   async function renderInspector() {
+    const list = app.getActiveSubmissions();
+    if ((!app.state.selectedScanId || !list.some(s => s.id === app.state.selectedScanId)) && list.length > 0) {
+      app.state.selectedScanId = list[0].id;
+    }
+
     populateSelector();
     renderCornerLogsUI();
-    const list = app.getActiveSubmissions();
     const currentIndex = list.findIndex(s => s.id === app.state.selectedScanId);
 
     // Update Index Tracker and Arrow button states

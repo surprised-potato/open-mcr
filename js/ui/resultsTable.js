@@ -14,7 +14,7 @@ export function initResultsTable(app) {
   function renderResults() {
     const query = (searchInput.value || '').trim().toLowerCase();
     const activeExam = app.getActiveExam();
-    let submissions = app.getActiveSubmissions().filter(s => !s.error);
+    let submissions = app.getActiveSubmissions();
 
     // Apply sorting
     if (activeExam.sortByName) {
@@ -27,7 +27,8 @@ export function initResultsTable(app) {
       submissions = submissions.filter(s =>
         (s.studentId && s.studentId.toLowerCase().includes(query)) ||
         (s.studentName && s.studentName.toLowerCase().includes(query)) ||
-        (s.testFormCode && s.testFormCode.toLowerCase().includes(query))
+        (s.testFormCode && s.testFormCode.toLowerCase().includes(query)) ||
+        (s.filename && s.filename.toLowerCase().includes(query))
       );
     }
 
@@ -36,7 +37,7 @@ export function initResultsTable(app) {
     if (submissions.length === 0) {
       tableBody.innerHTML = `
         <tr>
-          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No graded results for "${activeExam.name}".</td>
+          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No results found for "${activeExam.name}". Scan sheets in the <strong>Scanner</strong> tab to begin.</td>
         </tr>`;
       return;
     }
@@ -46,15 +47,18 @@ export function initResultsTable(app) {
 
     submissions.forEach(sub => {
       const tr = document.createElement('tr');
-      const scoreBadge = sub.score >= 70
+      const isErr = Boolean(sub.error);
+      const scoreBadge = isErr
+        ? `<span class="badge badge-rose" title="${sub.error || 'Scan error'}">Error</span>`
+        : sub.score >= 70
         ? `<span class="badge badge-mint">${sub.score}%</span>`
         : `<span class="badge badge-rose">${sub.score}%</span>`;
 
       tr.innerHTML = `
-        <td><strong><code>${sub.studentId || 'Unknown'}</code></strong></td>
-        <td>${sub.studentName || 'Unknown'}</td>
-        <td><span class="badge badge-slate">${sub.testFormCode || 'A'}</span></td>
-        <td>${sub.points !== undefined ? sub.points : 0} / ${numQ}</td>
+        <td><strong><code>${sub.studentId || '-'}</code></strong></td>
+        <td>${sub.studentName || '-'}</td>
+        <td><span class="badge badge-slate">${sub.testFormCode || '-'}</span></td>
+        <td>${isErr ? '—' : `${sub.points !== undefined ? sub.points : 0} / ${numQ}`}</td>
         <td>${scoreBadge}</td>
         <td><code>${sub.threshold ? (sub.threshold * 100).toFixed(1) + '%' : '-'}</code></td>
         <td>
