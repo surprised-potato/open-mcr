@@ -189,16 +189,18 @@ export function findCornerMarksFromPolygons(allPolygons, toleranceMult = 1.0) {
         }
       }
     }
-    // 2. Partial match fallback (2 of 3 squares)
+    // 2. Partial match fallback (2 of 3 squares) with global vector parallelogram completion
     else if (trSquares.length > 0 && blSquares.length > 0) {
       for (const tr of trSquares) {
         for (const bl of blSquares) {
           const topLeft = lMark.polygon[0];
           const topRight = getCornerWrtBasis(tr.square.polygon, Corner.TR, basisTransformer);
           const bottomLeft = getCornerWrtBasis(bl.square.polygon, Corner.BL, basisTransformer);
-          const trBasis = basisTransformer.toBasis(topRight);
-          const blBasis = basisTransformer.toBasis(bottomLeft);
-          const bottomRight = basisTransformer.fromBasis(new Point(trBasis.x, blBasis.y));
+          // Global vector parallelogram: BR = TR + BL - TL
+          const bottomRight = new Point(
+            topRight.x + bottomLeft.x - topLeft.x,
+            topRight.y + bottomLeft.y - topLeft.y
+          );
 
           const sizeError = (
             Math.abs(tr.square.unitLength - lMark.unitLength) +
@@ -225,8 +227,11 @@ export function findCornerMarksFromPolygons(allPolygons, toleranceMult = 1.0) {
           const topLeft = lMark.polygon[0];
           const topRight = getCornerWrtBasis(tr.square.polygon, Corner.TR, basisTransformer);
           const bottomRight = getCornerWrtBasis(br.square.polygon, Corner.BR, basisTransformer);
-          const brBasis = basisTransformer.toBasis(bottomRight);
-          const bottomLeft = basisTransformer.fromBasis(new Point(0, brBasis.y));
+          // Global vector parallelogram: BL = TL + BR - TR
+          const bottomLeft = new Point(
+            topLeft.x + bottomRight.x - topRight.x,
+            topLeft.y + bottomRight.y - topRight.y
+          );
 
           const sizeError = (
             Math.abs(tr.square.unitLength - lMark.unitLength) +
@@ -253,8 +258,11 @@ export function findCornerMarksFromPolygons(allPolygons, toleranceMult = 1.0) {
           const topLeft = lMark.polygon[0];
           const bottomLeft = getCornerWrtBasis(bl.square.polygon, Corner.BL, basisTransformer);
           const bottomRight = getCornerWrtBasis(br.square.polygon, Corner.BR, basisTransformer);
-          const brBasis = basisTransformer.toBasis(bottomRight);
-          const topRight = basisTransformer.fromBasis(new Point(brBasis.x, 0));
+          // Global vector parallelogram: TR = TL + BR - BL
+          const topRight = new Point(
+            topLeft.x + bottomRight.x - bottomLeft.x,
+            topLeft.y + bottomRight.y - bottomLeft.y
+          );
 
           const sizeError = (
             Math.abs(bl.square.unitLength - lMark.unitLength) +
