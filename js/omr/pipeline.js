@@ -19,7 +19,10 @@ export function processScanImage(cv, imageMat, options = {}) {
   const emptyAsG = Boolean(options.emptyAsG);
 
   // 1. Locate fiducial alignment marks or use manual corners if provided
-  let corners, lMark, squares;
+  let corners, lMark, squares, rotation = null;
+  let processedMat = imageMat;
+  let didRotate = false;
+
   if (options.manualCorners && Array.isArray(options.manualCorners) && options.manualCorners.length === 4) {
     corners = options.manualCorners;
     lMark = null;
@@ -29,10 +32,16 @@ export function processScanImage(cv, imageMat, options = {}) {
     corners = found.corners;
     lMark = found.lMark;
     squares = found.squares;
+    rotation = found.rotation !== undefined ? found.rotation : null;
+    if (rotation !== null) {
+      processedMat = new cv.Mat();
+      cv.rotate(imageMat, processedMat, rotation);
+      didRotate = true;
+    }
   }
 
-  // 2. Construct 36x48 transformed grid
-  const grid = new Grid(corners, imageMat, cv);
+  // 2. Construct transformed grid
+  const grid = new Grid(corners, processedMat, cv);
 
   // 3. Read metadata fields
   const fieldData = {};
@@ -57,6 +66,14 @@ export function processScanImage(cv, imageMat, options = {}) {
     questionFills.push(fills[0]);
     allFillValues.push(fills[0]);
     questionBubbleOverlays.push({ questionIndex: q, bubbleCoordinates: bubbleCoordinates[0] });
+  }
+
+  // Dispose OpenCV perspective matrix
+  grid.dispose();
+  const resultImageWidth = processedMat.cols;
+  const resultImageHeight = processedMat.rows;
+  if (didRotate) {
+    processedMat.delete();
   }
 
   // 5. Calculate dynamic adaptive threshold
@@ -136,8 +153,9 @@ export function processScanImage(cv, imageMat, options = {}) {
     corners,
     lMark,
     squares,
+    rotation,
     annotatedBubbles,
-    imageWidth: imageMat.cols,
-    imageHeight: imageMat.rows
+    imageWidth: resultImageWidth,
+    imageHeight: resultImageHeight
   };
 }

@@ -116,6 +116,40 @@ export function initScanner(app) {
     });
   }
 
+  async function rotateDataUrl(dataUrl, rotationCode) {
+    if (rotationCode === null || rotationCode === undefined) return dataUrl;
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (rotationCode === 0) { // 90 CW
+          canvas.width = img.height;
+          canvas.height = img.width;
+          ctx.translate(canvas.width, 0);
+          ctx.rotate(Math.PI / 2);
+        } else if (rotationCode === 1) { // 180
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.translate(canvas.width, canvas.height);
+          ctx.rotate(Math.PI);
+        } else if (rotationCode === 2) { // 270 CW / 90 CCW
+          canvas.width = img.height;
+          canvas.height = img.width;
+          ctx.translate(0, canvas.height);
+          ctx.rotate(-Math.PI / 2);
+        } else {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        }
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/jpeg', 0.95));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
   async function handleIncomingFiles(files) {
     const tasks = [];
 
@@ -149,10 +183,15 @@ export function initScanner(app) {
         // Score the scanned result
         const scored = app.scoreExtractedData(scanResult);
 
+        let finalDataUrl = task.dataUrl;
+        if (scanResult.rotation !== null && scanResult.rotation !== undefined) {
+          finalDataUrl = await rotateDataUrl(task.dataUrl, scanResult.rotation);
+        }
+
         const submission = {
           id: `scan_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
           filename: task.filename,
-          imageDataUrl: task.dataUrl,
+          imageDataUrl: finalDataUrl,
           studentId: scanResult.studentId || 'Unknown',
           studentName: scanResult.studentName || 'Unknown',
           testFormCode: scanResult.testFormCode || 'A',
@@ -166,6 +205,7 @@ export function initScanner(app) {
           corners: scanResult.corners,
           lMark: scanResult.lMark,
           squares: scanResult.squares,
+          rotation: scanResult.rotation,
           annotatedBubbles: scanResult.annotatedBubbles,
           imageWidth: scanResult.imageWidth,
           imageHeight: scanResult.imageHeight,

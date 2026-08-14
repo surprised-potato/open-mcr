@@ -2,7 +2,7 @@
  * gridReader.js - Reads bubble marks from 36x48 transformed grid
  */
 
-import { Point, ChangeOfBasisTransformer, findGreatestValueIndexes } from './geometry.js';
+import { Point, findGreatestValueIndexes } from './geometry.js';
 import {
   GRID_HORIZONTAL_CELLS,
   GRID_VERTICAL_CELLS,
@@ -22,28 +22,52 @@ export class Grid {
     this.imageMat = imageMat;
     this.cv = cv;
 
-    // Basis transformer: Origin = TL (0), BL = BL (3), BR = BR (2)
-    this.basisTransformer = new ChangeOfBasisTransformer(
-      corners[0],
-      corners[3],
-      corners[2]
-    );
+    // Perspective: normalized [0,1] space -> image pixel space
+    const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0,  1, 0,  1, 1,  0, 1  // unit square TL, TR, BR, BL
+    ]);
+    const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      corners[0].x, corners[0].y,  // TL
+      corners[1].x, corners[1].y,  // TR
+      corners[2].x, corners[2].y,  // BR
+      corners[3].x, corners[3].y   // BL
+    ]);
+
+    this._perspMat = cv.getPerspectiveTransform(srcPts, dstPts);
+    srcPts.delete();
+    dstPts.delete();
 
     this.horizontalCellSize = 1 / this.horizontalCells;
     this.verticalCellSize = 1 / this.verticalCells;
   }
 
-  getCellShapeInBasis(across, down) {
-    return [
-      new Point(across * this.horizontalCellSize, down * this.verticalCellSize),
-      new Point((across + 1) * this.horizontalCellSize, down * this.verticalCellSize),
-      new Point((across + 1) * this.horizontalCellSize, (down + 1) * this.verticalCellSize),
-      new Point(across * this.horizontalCellSize, (down + 1) * this.verticalCellSize)
-    ];
+  _gridToImage(normX, normY) {
+    const d = this._perspMat.data64F;
+    const w = d[6] * normX + d[7] * normY + d[8];
+    return new Point(
+      (d[0] * normX + d[1] * normY + d[2]) / w,
+      (d[3] * normX + d[4] * normY + d[5]) / w
+    );
   }
 
   getCellShape(across, down) {
-    return this.basisTransformer.polyFromBasis(this.getCellShapeInBasis(across, down));
+    const x0 = across * this.horizontalCellSize;
+    const y0 = down * this.verticalCellSize;
+    const x1 = (across + 1) * this.horizontalCellSize;
+    const y1 = (down + 1) * this.verticalCellSize;
+    return [
+      this._gridToImage(x0, y0),
+      this._gridToImage(x1, y0),
+      this._gridToImage(x1, y1),
+      this._gridToImage(x0, y1)
+    ];
+  }
+
+  dispose() {
+    if (this._perspMat) {
+      this._perspMat.delete();
+      this._perspMat = null;
+    }
   }
 
   getCellRange(across, down) {

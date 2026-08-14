@@ -18,35 +18,60 @@ export function convertToGrayscale(cv, src) {
 
 export function removeHfNoise(cv, src) {
   const minDim = Math.min(src.rows, src.cols);
-  const sigma = minDim * 5.6569e-4;
+  const sigma = minDim * 1.1314e-3;
   const dst = new cv.Mat();
   const ksize = new cv.Size(0, 0);
   cv.GaussianBlur(src, dst, ksize, sigma, sigma, cv.BORDER_DEFAULT);
   return dst;
 }
 
-export function detectEdges(cv, src) {
+export function closeGaps(cv, src) {
+  const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
   const dst = new cv.Mat();
-  const lowThreshold = 100;
-  cv.Canny(src, dst, lowThreshold, lowThreshold * 3, 3, true);
+  cv.morphologyEx(src, dst, cv.MORPH_CLOSE, kernel);
+  kernel.delete();
   return dst;
 }
 
-export function findPolygons(cv, src) {
+export function detectEdges(cv, src) {
+  const tempDst = new cv.Mat();
+  const otsuThresh = cv.threshold(src, tempDst, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+  tempDst.delete();
+
+  const low = Math.round(Math.max(20, otsuThresh * 0.25));
+  const high = Math.round(Math.min(200, otsuThresh * 0.65));
+
+  const dst = new cv.Mat();
+  cv.Canny(src, dst, low, high, 3, true);
+  return dst;
+}
+
+export function extractContours(cv, src) {
   const gray = convertToGrayscale(cv, src);
   const smoothed = removeHfNoise(cv, gray);
-  const edges = detectEdges(cv, smoothed);
+  const closed = closeGaps(cv, smoothed);
+  const edges = detectEdges(cv, closed);
 
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
   cv.findContours(edges, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
 
+  edges.delete();
+  closed.delete();
+  smoothed.delete();
+  gray.delete();
+  hierarchy.delete();
+
+  return contours;
+}
+
+export function contoursToPolygons(cv, contours, epsilonFraction = 0.02) {
   const polygons = [];
   for (let i = 0; i < contours.size(); i++) {
     const contour = contours.get(i);
     const perimeter = cv.arcLength(contour, true);
     const approx = new cv.Mat();
-    cv.approxPolyDP(contour, approx, 0.05 * perimeter, true);
+    cv.approxPolyDP(contour, approx, epsilonFraction * perimeter, true);
 
     const polyPoints = [];
     for (let j = 0; j < approx.rows; j++) {
@@ -59,13 +84,13 @@ export function findPolygons(cv, src) {
       polygons.push(polygonToClockwise(polyPoints));
     }
   }
+  return polygons;
+}
 
+export function findPolygons(cv, src, epsilonFraction = 0.02) {
+  const contours = extractContours(cv, src);
+  const polygons = contoursToPolygons(cv, contours, epsilonFraction);
   contours.delete();
-  hierarchy.delete();
-  edges.delete();
-  smoothed.delete();
-  gray.delete();
-
   return polygons;
 }
 
