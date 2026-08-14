@@ -11,10 +11,10 @@ const STORE_CONFIG = 'config';
 
 let dbInstance = null;
 
-function openDatabase() {
+export function openDatabase() {
   if (dbInstance) return Promise.resolve(dbInstance);
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (typeof indexedDB === 'undefined') {
       console.warn("IndexedDB not supported in this browser. Falling back to memory/localStorage.");
       return resolve(null);
@@ -52,22 +52,24 @@ export async function saveExamsToDB(exams) {
     const db = await openDatabase();
     if (!db) return;
 
-    const tx = db.transaction([STORE_EXAMS], 'readwrite');
-    const store = tx.objectStore(STORE_EXAMS);
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_EXAMS], 'readwrite');
+      const store = tx.objectStore(STORE_EXAMS);
 
-    await new Promise((res, rej) => {
-      const clearReq = store.clear();
-      clearReq.onsuccess = res;
-      clearReq.onerror = rej;
-    });
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => {
+        console.warn("IndexedDB exams tx error:", e.target.error);
+        resolve(); // don't crash caller
+      };
+      tx.onabort = (e) => {
+        console.warn("IndexedDB exams tx aborted:", e.target.error);
+        resolve();
+      };
 
-    for (const exam of exams) {
-      store.put(exam);
-    }
-
-    return new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = rej;
+      store.clear();
+      for (const exam of exams) {
+        store.put(exam);
+      }
     });
   } catch (err) {
     console.warn("Error saving exams to IndexedDB:", err);
@@ -79,7 +81,7 @@ export async function loadExamsFromDB() {
     const db = await openDatabase();
     if (!db) return [];
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const tx = db.transaction([STORE_EXAMS], 'readonly');
       const store = tx.objectStore(STORE_EXAMS);
       const req = store.getAll();
@@ -104,23 +106,24 @@ export async function saveSubmissionsToDB(submissions) {
     const db = await openDatabase();
     if (!db) return;
 
-    const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
-    const store = tx.objectStore(STORE_SUBMISSIONS);
+    return new Promise((resolve) => {
+      const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
+      const store = tx.objectStore(STORE_SUBMISSIONS);
 
-    // Clear existing to keep exact sync
-    await new Promise((res, rej) => {
-      const clearReq = store.clear();
-      clearReq.onsuccess = res;
-      clearReq.onerror = rej;
-    });
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => {
+        console.warn("IndexedDB submissions tx error:", e.target.error);
+        resolve();
+      };
+      tx.onabort = (e) => {
+        console.warn("IndexedDB submissions tx aborted:", e.target.error);
+        resolve();
+      };
 
-    for (const sub of submissions) {
-      store.put(sub);
-    }
-
-    return new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = rej;
+      store.clear();
+      for (const sub of submissions) {
+        store.put(sub);
+      }
     });
   } catch (err) {
     console.warn("Error saving submissions to IndexedDB:", err);
@@ -132,7 +135,7 @@ export async function loadSubmissionsFromDB() {
     const db = await openDatabase();
     if (!db) return [];
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const tx = db.transaction([STORE_SUBMISSIONS], 'readonly');
       const store = tx.objectStore(STORE_SUBMISSIONS);
       const req = store.getAll();
@@ -157,13 +160,16 @@ export async function saveSingleSubmissionToDB(sub) {
     const db = await openDatabase();
     if (!db) return;
 
-    const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
-    const store = tx.objectStore(STORE_SUBMISSIONS);
-    store.put(sub);
+    return new Promise((resolve) => {
+      const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
+      const store = tx.objectStore(STORE_SUBMISSIONS);
+      store.put(sub);
 
-    return new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = rej;
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => {
+        console.warn("IndexedDB save single submission error:", e.target.error);
+        resolve();
+      };
     });
   } catch (err) {
     console.warn("Error saving submission to IndexedDB:", err);
@@ -175,13 +181,16 @@ export async function deleteSubmissionFromDB(id) {
     const db = await openDatabase();
     if (!db) return;
 
-    const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
-    const store = tx.objectStore(STORE_SUBMISSIONS);
-    store.delete(id);
+    return new Promise((resolve) => {
+      const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
+      const store = tx.objectStore(STORE_SUBMISSIONS);
+      store.delete(id);
 
-    return new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = rej;
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => {
+        console.warn("IndexedDB delete submission error:", e.target.error);
+        resolve();
+      };
     });
   } catch (err) {
     console.warn("Error deleting submission from IndexedDB:", err);
@@ -193,13 +202,16 @@ export async function clearSubmissionsFromDB() {
     const db = await openDatabase();
     if (!db) return;
 
-    const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
-    const store = tx.objectStore(STORE_SUBMISSIONS);
-    store.clear();
+    return new Promise((resolve) => {
+      const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
+      const store = tx.objectStore(STORE_SUBMISSIONS);
+      store.clear();
 
-    return new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = rej;
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => {
+        console.warn("IndexedDB clear submissions error:", e.target.error);
+        resolve();
+      };
     });
   } catch (err) {
     console.warn("Error clearing submissions in IndexedDB:", err);

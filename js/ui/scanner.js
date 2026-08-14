@@ -4,6 +4,8 @@
 
 /* global pdfjsLib */
 
+import { saveSingleSubmissionToDB } from '../storage/localStore.js';
+
 export function initScanner(app) {
   const dropzone = document.getElementById('scannerDropzone');
   const fileInput = document.getElementById('fileScanInput');
@@ -211,6 +213,7 @@ export function initScanner(app) {
         };
 
         app.state.submissions.push(submission);
+        saveSingleSubmissionToDB(submission);
         app.saveState();
         renderBatchTable();
       } catch (err) {
@@ -234,6 +237,7 @@ export function initScanner(app) {
           scannedAt: new Date().toISOString()
         };
         app.state.submissions.push(failedSub);
+        saveSingleSubmissionToDB(failedSub);
         app.saveState();
         renderBatchTable();
       }
