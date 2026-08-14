@@ -16,6 +16,8 @@ import {
   guessCentroid,
   isWithinTolerance,
   getCornerWrtBasis,
+  calc2dDist,
+  calcCornerAngles,
   Corner,
   ChangeOfBasisTransformer
 } from './geometry.js';
@@ -76,11 +78,8 @@ export function findCornerMarksFromPolygons(allPolygons, toleranceMult = 1.0) {
   const hexagons = allPolygons.filter(p => p.length === 6);
   const quadrilaterals = allPolygons.filter(p => p.length === 4);
 
-  const nominalToRightSide = 50 - 0.5; // 49.5
-  const nominalToBottom = (64 - 0.5) / 2; // 31.75
-  const xTolerance = 0.25 * toleranceMult * nominalToRightSide;
-  const yTolerance = 0.25 * toleranceMult * nominalToBottom;
-
+  const nominalToRightSide = 49.5;
+  const nominalToBottom = 31.75;
   const candidates = [];
 
   for (let i = 0; i < hexagons.length; i++) {
@@ -103,9 +102,9 @@ export function findCornerMarksFromPolygons(allPolygons, toleranceMult = 1.0) {
       continue;
     }
 
-    const topRightSquares = [];
-    const bottomLeftSquares = [];
-    const bottomRightSquares = [];
+    const trSquares = [];
+    const blSquares = [];
+    const brSquares = [];
 
     for (let q = 0; q < quadrilaterals.length; q++) {
       let square;
@@ -116,134 +115,166 @@ export function findCornerMarksFromPolygons(allPolygons, toleranceMult = 1.0) {
       }
 
       const centroid = guessCentroid(square.polygon);
-      const centroidBasis = basisTransformer.toBasis(centroid);
+      const cb = basisTransformer.toBasis(centroid);
 
-      if (
-        isWithinTolerance(centroidBasis.x, nominalToRightSide, xTolerance) &&
-        isWithinTolerance(centroidBasis.y, 0.5, yTolerance)
-      ) {
-        topRightSquares.push(square);
-      } else if (
-        isWithinTolerance(centroidBasis.x, 0.5, xTolerance) &&
-        isWithinTolerance(centroidBasis.y, nominalToBottom, yTolerance)
-      ) {
-        bottomLeftSquares.push(square);
-      } else if (
-        isWithinTolerance(centroidBasis.x, nominalToRightSide, xTolerance) &&
-        isWithinTolerance(centroidBasis.y, nominalToBottom, yTolerance)
-      ) {
-        bottomRightSquares.push(square);
+      // Top-Right region in basis space
+      if (cb.x >= 30 && cb.x <= 65 && cb.y >= -5 && cb.y <= 10) {
+        trSquares.push({ square, cb });
+      }
+      // Bottom-Left region in basis space
+      if (cb.x >= -5 && cb.x <= 10 && cb.y >= 18 && cb.y <= 45) {
+        blSquares.push({ square, cb });
+      }
+      // Bottom-Right region in basis space
+      if (cb.x >= 30 && cb.x <= 65 && cb.y >= 18 && cb.y <= 45) {
+        brSquares.push({ square, cb });
       }
     }
 
-    // Sort matching squares by distance to nominal in basis space
-    if (topRightSquares.length > 0) {
-      topRightSquares.sort((a, b) => {
-        const cA = basisTransformer.toBasis(guessCentroid(a.polygon));
-        const cB = basisTransformer.toBasis(guessCentroid(b.polygon));
-        return Math.hypot(cA.x - nominalToRightSide, cA.y - 0.5) - Math.hypot(cB.x - nominalToRightSide, cB.y - 0.5);
-      });
-    }
+    // 1. Full 3-square combinations evaluated holistically
+    if (trSquares.length > 0 && blSquares.length > 0 && brSquares.length > 0) {
+      for (const tr of trSquares) {
+        for (const bl of blSquares) {
+          for (const br of brSquares) {
+            const topLeft = lMark.polygon[0];
+            const topRight = getCornerWrtBasis(tr.square.polygon, Corner.TR, basisTransformer);
+            const bottomRight = getCornerWrtBasis(br.square.polygon, Corner.BR, basisTransformer);
+            const bottomLeft = getCornerWrtBasis(bl.square.polygon, Corner.BL, basisTransformer);
 
-    if (bottomLeftSquares.length > 0) {
-      bottomLeftSquares.sort((a, b) => {
-        const cA = basisTransformer.toBasis(guessCentroid(a.polygon));
-        const cB = basisTransformer.toBasis(guessCentroid(b.polygon));
-        return Math.hypot(cA.x - 0.5, cA.y - nominalToBottom) - Math.hypot(cB.x - 0.5, cB.y - nominalToBottom);
-      });
-    }
+            const topLen = calc2dDist(topLeft, topRight);
+            const botLen = calc2dDist(bottomLeft, bottomRight);
+            const leftLen = calc2dDist(topLeft, bottomLeft);
+            const rightLen = calc2dDist(topRight, bottomRight);
 
-    if (bottomRightSquares.length > 0) {
-      bottomRightSquares.sort((a, b) => {
-        const cA = basisTransformer.toBasis(guessCentroid(a.polygon));
-        const cB = basisTransformer.toBasis(guessCentroid(b.polygon));
-        return Math.hypot(cA.x - nominalToRightSide, cA.y - nominalToBottom) - Math.hypot(cB.x - nominalToRightSide, cB.y - nominalToBottom);
-      });
-    }
+            const widthDiff = Math.abs(topLen - botLen) / Math.max(topLen, botLen);
+            const heightDiff = Math.abs(leftLen - rightLen) / Math.max(leftLen, rightLen);
 
-    // 1. Full 3-square match
-    if (topRightSquares.length > 0 && bottomLeftSquares.length > 0 && bottomRightSquares.length > 0) {
-      const cTR = basisTransformer.toBasis(guessCentroid(topRightSquares[0].polygon));
-      const cBL = basisTransformer.toBasis(guessCentroid(bottomLeftSquares[0].polygon));
-      const cBR = basisTransformer.toBasis(guessCentroid(bottomRightSquares[0].polygon));
+            const avgW = (topLen + botLen) / 2;
+            const avgH = (leftLen + rightLen) / 2;
+            const aspect = avgH / avgW;
+            const aspectDiff = Math.abs(aspect - (32 / 50)) / (32 / 50);
 
-      const trDist = Math.hypot(cTR.x - nominalToRightSide, cTR.y - 0.5);
-      const blDist = Math.hypot(cBL.x - 0.5, cBL.y - nominalToBottom);
-      const brDist = Math.hypot(cBR.x - nominalToRightSide, cBR.y - nominalToBottom);
-      const score = trDist + blDist + brDist;
+            const angles = calcCornerAngles([topLeft, topRight, bottomRight, bottomLeft]);
+            const angleError = angles.reduce((sum, a) => sum + Math.abs(a - Math.PI / 2), 0);
 
-      const topLeftCorner = lMark.polygon[0];
-      const topRightCorner = getCornerWrtBasis(topRightSquares[0].polygon, Corner.TR, basisTransformer);
-      const bottomRightCorner = getCornerWrtBasis(bottomRightSquares[0].polygon, Corner.BR, basisTransformer);
-      const bottomLeftCorner = getCornerWrtBasis(bottomLeftSquares[0].polygon, Corner.BL, basisTransformer);
+            const sizeError = (
+              Math.abs(tr.square.unitLength - lMark.unitLength) +
+              Math.abs(bl.square.unitLength - lMark.unitLength) +
+              Math.abs(br.square.unitLength - lMark.unitLength)
+            ) / lMark.unitLength;
 
-      candidates.push({
-        score,
-        isFull: true,
-        corners: [topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner],
-        lMark: lMark.polygon,
-        squares: [topRightSquares[0].polygon, bottomRightSquares[0].polygon, bottomLeftSquares[0].polygon]
-      });
+            const basisPosError = (
+              Math.hypot(tr.cb.x - nominalToRightSide, tr.cb.y - 0.5) +
+              Math.hypot(bl.cb.x - 0.5, bl.cb.y - nominalToBottom) +
+              Math.hypot(br.cb.x - nominalToRightSide, br.cb.y - nominalToBottom)
+            );
+
+            const totalScore = (
+              sizeError * 25.0 +
+              widthDiff * 30.0 +
+              heightDiff * 30.0 +
+              aspectDiff * 20.0 +
+              angleError * 15.0 +
+              basisPosError * 0.5
+            );
+
+            candidates.push({
+              score: totalScore,
+              isFull: true,
+              corners: [topLeft, topRight, bottomRight, bottomLeft],
+              lMark: lMark.polygon,
+              squares: [tr.square.polygon, br.square.polygon, bl.square.polygon]
+            });
+          }
+        }
+      }
     }
     // 2. Partial match fallback (2 of 3 squares)
-    else if (topRightSquares.length > 0 && bottomLeftSquares.length > 0) {
-      const cTR = basisTransformer.toBasis(guessCentroid(topRightSquares[0].polygon));
-      const cBL = basisTransformer.toBasis(guessCentroid(bottomLeftSquares[0].polygon));
-      const trDist = Math.hypot(cTR.x - nominalToRightSide, cTR.y - 0.5);
-      const blDist = Math.hypot(cBL.x - 0.5, cBL.y - nominalToBottom);
+    else if (trSquares.length > 0 && blSquares.length > 0) {
+      for (const tr of trSquares) {
+        for (const bl of blSquares) {
+          const topLeft = lMark.polygon[0];
+          const topRight = getCornerWrtBasis(tr.square.polygon, Corner.TR, basisTransformer);
+          const bottomLeft = getCornerWrtBasis(bl.square.polygon, Corner.BL, basisTransformer);
+          const trBasis = basisTransformer.toBasis(topRight);
+          const blBasis = basisTransformer.toBasis(bottomLeft);
+          const bottomRight = basisTransformer.fromBasis(new Point(trBasis.x, blBasis.y));
 
-      const topLeftCorner = lMark.polygon[0];
-      const topRightCorner = getCornerWrtBasis(topRightSquares[0].polygon, Corner.TR, basisTransformer);
-      const bottomLeftCorner = getCornerWrtBasis(bottomLeftSquares[0].polygon, Corner.BL, basisTransformer);
-      const trBasis = basisTransformer.toBasis(topRightCorner);
-      const blBasis = basisTransformer.toBasis(bottomLeftCorner);
-      const bottomRightCorner = basisTransformer.fromBasis(new Point(trBasis.x, blBasis.y));
+          const sizeError = (
+            Math.abs(tr.square.unitLength - lMark.unitLength) +
+            Math.abs(bl.square.unitLength - lMark.unitLength)
+          ) / lMark.unitLength;
 
-      candidates.push({
-        score: 100 + trDist + blDist,
-        isFull: false,
-        corners: [topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner],
-        lMark: lMark.polygon,
-        squares: [topRightSquares[0].polygon, bottomLeftSquares[0].polygon]
-      });
-    } else if (topRightSquares.length > 0 && bottomRightSquares.length > 0) {
-      const cTR = basisTransformer.toBasis(guessCentroid(topRightSquares[0].polygon));
-      const cBR = basisTransformer.toBasis(guessCentroid(bottomRightSquares[0].polygon));
-      const trDist = Math.hypot(cTR.x - nominalToRightSide, cTR.y - 0.5);
-      const brDist = Math.hypot(cBR.x - nominalToRightSide, cBR.y - nominalToBottom);
+          const basisPosError = (
+            Math.hypot(tr.cb.x - nominalToRightSide, tr.cb.y - 0.5) +
+            Math.hypot(bl.cb.x - 0.5, bl.cb.y - nominalToBottom)
+          );
 
-      const topLeftCorner = lMark.polygon[0];
-      const topRightCorner = getCornerWrtBasis(topRightSquares[0].polygon, Corner.TR, basisTransformer);
-      const bottomRightCorner = getCornerWrtBasis(bottomRightSquares[0].polygon, Corner.BR, basisTransformer);
-      const brBasis = basisTransformer.toBasis(bottomRightCorner);
-      const bottomLeftCorner = basisTransformer.fromBasis(new Point(0, brBasis.y));
+          candidates.push({
+            score: 100 + sizeError * 25.0 + basisPosError * 0.5,
+            isFull: false,
+            corners: [topLeft, topRight, bottomRight, bottomLeft],
+            lMark: lMark.polygon,
+            squares: [tr.square.polygon, bl.square.polygon]
+          });
+        }
+      }
+    } else if (trSquares.length > 0 && brSquares.length > 0) {
+      for (const tr of trSquares) {
+        for (const br of brSquares) {
+          const topLeft = lMark.polygon[0];
+          const topRight = getCornerWrtBasis(tr.square.polygon, Corner.TR, basisTransformer);
+          const bottomRight = getCornerWrtBasis(br.square.polygon, Corner.BR, basisTransformer);
+          const brBasis = basisTransformer.toBasis(bottomRight);
+          const bottomLeft = basisTransformer.fromBasis(new Point(0, brBasis.y));
 
-      candidates.push({
-        score: 100 + trDist + brDist,
-        isFull: false,
-        corners: [topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner],
-        lMark: lMark.polygon,
-        squares: [topRightSquares[0].polygon, bottomRightSquares[0].polygon]
-      });
-    } else if (bottomLeftSquares.length > 0 && bottomRightSquares.length > 0) {
-      const cBL = basisTransformer.toBasis(guessCentroid(bottomLeftSquares[0].polygon));
-      const cBR = basisTransformer.toBasis(guessCentroid(bottomRightSquares[0].polygon));
-      const blDist = Math.hypot(cBL.x - 0.5, cBL.y - nominalToBottom);
-      const brDist = Math.hypot(cBR.x - nominalToRightSide, cBR.y - nominalToBottom);
+          const sizeError = (
+            Math.abs(tr.square.unitLength - lMark.unitLength) +
+            Math.abs(br.square.unitLength - lMark.unitLength)
+          ) / lMark.unitLength;
 
-      const topLeftCorner = lMark.polygon[0];
-      const bottomLeftCorner = getCornerWrtBasis(bottomLeftSquares[0].polygon, Corner.BL, basisTransformer);
-      const bottomRightCorner = getCornerWrtBasis(bottomRightSquares[0].polygon, Corner.BR, basisTransformer);
-      const brBasis = basisTransformer.toBasis(bottomRightCorner);
-      const topRightCorner = basisTransformer.fromBasis(new Point(brBasis.x, 0));
+          const basisPosError = (
+            Math.hypot(tr.cb.x - nominalToRightSide, tr.cb.y - 0.5) +
+            Math.hypot(br.cb.x - nominalToRightSide, br.cb.y - nominalToBottom)
+          );
 
-      candidates.push({
-        score: 100 + blDist + brDist,
-        isFull: false,
-        corners: [topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner],
-        lMark: lMark.polygon,
-        squares: [bottomRightSquares[0].polygon, bottomLeftSquares[0].polygon]
-      });
+          candidates.push({
+            score: 100 + sizeError * 25.0 + basisPosError * 0.5,
+            isFull: false,
+            corners: [topLeft, topRight, bottomRight, bottomLeft],
+            lMark: lMark.polygon,
+            squares: [tr.square.polygon, br.square.polygon]
+          });
+        }
+      }
+    } else if (blSquares.length > 0 && brSquares.length > 0) {
+      for (const bl of blSquares) {
+        for (const br of brSquares) {
+          const topLeft = lMark.polygon[0];
+          const bottomLeft = getCornerWrtBasis(bl.square.polygon, Corner.BL, basisTransformer);
+          const bottomRight = getCornerWrtBasis(br.square.polygon, Corner.BR, basisTransformer);
+          const brBasis = basisTransformer.toBasis(bottomRight);
+          const topRight = basisTransformer.fromBasis(new Point(brBasis.x, 0));
+
+          const sizeError = (
+            Math.abs(bl.square.unitLength - lMark.unitLength) +
+            Math.abs(br.square.unitLength - lMark.unitLength)
+          ) / lMark.unitLength;
+
+          const basisPosError = (
+            Math.hypot(bl.cb.x - 0.5, bl.cb.y - nominalToBottom) +
+            Math.hypot(br.cb.x - nominalToRightSide, br.cb.y - nominalToBottom)
+          );
+
+          candidates.push({
+            score: 100 + sizeError * 25.0 + basisPosError * 0.5,
+            isFull: false,
+            corners: [topLeft, topRight, bottomRight, bottomLeft],
+            lMark: lMark.polygon,
+            squares: [br.square.polygon, bl.square.polygon]
+          });
+        }
+      }
     }
   }
 
