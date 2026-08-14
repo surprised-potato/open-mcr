@@ -136,6 +136,7 @@ export class Grid {
 
 /**
  * Calculates adaptive dynamic fill threshold across all bubbles using 1D Otsu variance maximization
+ * with a lower bound above the empty-cell background cluster to prevent class imbalance collapse.
  */
 export function calculateBubbleFillThreshold(allFillPercents) {
   const flat = allFillPercents.flat(Infinity).filter(v => typeof v === 'number' && !isNaN(v)).sort((a, b) => a - b);
@@ -149,6 +150,12 @@ export function calculateBubbleFillThreshold(allFillPercents) {
   const max = data[data.length - 1];
   if (max - min < 0.08) return min + 0.15;
 
+  // Estimate empty background cluster baseline (50th percentile median and 80th percentile)
+  const p50 = data[Math.floor(data.length * 0.50)]; // median empty
+  const p80 = data[Math.floor(data.length * 0.80)];
+  // Enforce that the threshold candidate must be strictly above the empty cluster
+  const minThresholdBound = Math.max(p50 + 0.045, p80 + 0.01);
+
   const numBins = 100;
   const hist = new Array(numBins).fill(0);
   for (const v of data) {
@@ -160,10 +167,12 @@ export function calculateBubbleFillThreshold(allFillPercents) {
   let sum = 0;
   for (let i = 0; i < numBins; i++) sum += i * hist[i];
 
+  const minBin = Math.max(0, Math.floor(((minThresholdBound - min) / (max - min)) * numBins));
+
   let sumB = 0;
   let wB = 0;
   let maxVariance = 0;
-  let bestBin = 0;
+  let bestBin = minBin;
 
   for (let t = 0; t < numBins; t++) {
     wB += hist[t];
@@ -172,6 +181,8 @@ export function calculateBubbleFillThreshold(allFillPercents) {
     if (wF === 0) break;
 
     sumB += t * hist[t];
+    if (t < minBin) continue; // enforce lower bound above empty cluster
+
     const mB = sumB / wB;
     const mF = (sum - sumB) / wF;
 
@@ -183,13 +194,7 @@ export function calculateBubbleFillThreshold(allFillPercents) {
   }
 
   const otsuVal = min + ((bestBin + 0.5) / numBins) * (max - min);
-
-  // Empty background median (50th percentile)
-  const medianEmpty = data[Math.floor(data.length * 0.5)];
-  // Clamp threshold so lighter pencil marks (e.g. 0.35-0.40) are reliably captured without capturing empty noise
-  const threshold = Math.min(otsuVal, medianEmpty + 0.09);
-
-  return Math.max(0.18, Math.min(0.70, threshold));
+  return Math.max(minThresholdBound, Math.min(0.70, otsuVal));
 }
 
 export function readFieldGroup(grid, groupInfo) {
@@ -255,6 +260,19 @@ export function decodeQuestionAnswer(fills, threshold, multiAsF = false, emptyAs
   for (let i = 0; i < fills.length; i++) {
     if (fills[i] > threshold) {
       filledIndexes.push(i);
+    }
+  }
+
+  // If no bubble passed the global threshold, check if one choice clearly stands out above the others in this row (local contrast)
+  if (filledIndexes.length === 0 && fills.length >= 2) {
+    const sorted = fills.map((val, idx) => ({ val, idx })).sort((a, b) => b.val - a.val);
+    const top1 = sorted[0];
+    const top2 = sorted[1];
+    const rowMean = fills.reduce((a, b) => a + b, 0) / fills.length;
+
+    // A bubble is clearly filled if it is significantly above the rest of its row
+    if (top1.val >= 0.23 && top1.val >= threshold * 0.75 && top1.val > top2.val * 1.25 && top1.val > rowMean + 0.04) {
+      filledIndexes.push(top1.idx);
     }
   }
 
