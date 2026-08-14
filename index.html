@@ -295,6 +295,22 @@
             </div>
           </div>
         </div>
+
+        <!-- Corner Correction Audit Log Section -->
+        <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0;">📍 Corner Correction Logs</h3>
+              <span class="badge badge-slate" id="cornerLogCountBadge">0 corrections</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-sm btn-primary" id="btnCopyLatestCornerLog" disabled>📋 Copy Latest Log</button>
+              <button class="btn btn-sm btn-subtle" id="btnCopyAllCornerLogs" disabled>📋 Copy All Logs (Markdown)</button>
+              <button class="btn btn-sm btn-subtle" id="btnClearCornerLogs" style="color: var(--pastel-rose-text);">🗑️ Clear Logs</button>
+            </div>
+          </div>
+          <div id="cornerLogContainer" style="background: var(--bg-card-subtle, #f8fafc); border: 1px solid var(--border-color); border-radius: var(--radius-sm, 6px); padding: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.78rem; max-height: 220px; overflow-y: auto; color: var(--text-main); white-space: pre-wrap; line-height: 1.45;">No corner corrections recorded yet. When you adjust corner handles and click "⚡ Re-process Sheet", the before and after coordinates and scoring deltas will be logged here.</div>
+        </div>
       </div>
     </section>
 

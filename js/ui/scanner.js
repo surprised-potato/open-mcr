@@ -203,6 +203,7 @@ export function initScanner(app) {
           scoredStatus: scored.scored,
           scoredError: scored.error,
           corners: scanResult.corners,
+          detectedCorners: scanResult.corners ? JSON.parse(JSON.stringify(scanResult.corners)) : null,
           lMark: scanResult.lMark,
           squares: scanResult.squares,
           rotation: scanResult.rotation,
@@ -227,6 +228,8 @@ export function initScanner(app) {
           answers: [],
           score: 0,
           points: 0,
+          corners: null,
+          detectedCorners: null,
           error: err.message || 'Alignment fiducials not found',
           scannedAt: new Date().toISOString()
         };

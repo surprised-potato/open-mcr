@@ -88,6 +88,7 @@ export function initInspector(app) {
 
   async function renderInspector() {
     populateSelector();
+    renderCornerLogsUI();
     const sub = getSelectedSubmission();
 
     if (!sub) {
@@ -437,12 +438,157 @@ export function initInspector(app) {
     drawCanvas();
   });
 
+  const cornerLogCountBadge = document.getElementById('cornerLogCountBadge');
+  const btnCopyLatestCornerLog = document.getElementById('btnCopyLatestCornerLog');
+  const btnCopyAllCornerLogs = document.getElementById('btnCopyAllCornerLogs');
+  const btnClearCornerLogs = document.getElementById('btnClearCornerLogs');
+  const cornerLogContainer = document.getElementById('cornerLogContainer');
+
+  const CORNER_LOGS_STORAGE_KEY = 'openmcr_corner_correction_logs';
+
+  function getCornerLogs() {
+    try {
+      const raw = localStorage.getItem(CORNER_LOGS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveCornerLogs(logs) {
+    try {
+      localStorage.setItem(CORNER_LOGS_STORAGE_KEY, JSON.stringify(logs));
+    } catch (e) {
+      console.warn("Could not save corner correction logs to localStorage:", e);
+    }
+  }
+
+  function formatSingleLogMarkdown(entry) {
+    const b = entry.before;
+    const a = entry.after;
+    let cornerLines = '';
+    entry.after.deltas.forEach(d => {
+      if (d.before) {
+        const signX = d.dx >= 0 ? `+${d.dx}` : `${d.dx}`;
+        const signY = d.dy >= 0 ? `+${d.dy}` : `${d.dy}`;
+        cornerLines += `  - **${d.corner}**: (${d.before.x}, ${d.before.y}) ➔ (${d.after.x}, ${d.after.y}) [Δx: ${signX}, Δy: ${signY}, dist: ${d.dist}px]\n`;
+      } else {
+        cornerLines += `  - **${d.corner}**: [no auto-detect] ➔ (${d.after.x}, ${d.after.y})\n`;
+      }
+    });
+
+    return `### 📍 Corner Correction Log: \`${entry.filename}\` (${new Date(entry.timestamp).toLocaleString()})
+- **Image Size**: ${entry.imageWidth} × ${entry.imageHeight} px | **Form Variant**: ${entry.formVariant}
+- **Before Status**: ${b.error ? `⚠️ Error: "${b.error}"` : `Graded (${b.score}%, ${b.points} pts), ID: \`${b.studentId}\`, Form: \`${b.testFormCode}\``}
+- **Corner Shifts**:
+${cornerLines.trimEnd()}
+- **After Re-process**: Score: **${a.score}%** (${a.points} pts) | Student ID: \`${a.studentId}\` | Form: \`${a.testFormCode}\` | Filled Answers: ${a.answersCount} | Threshold: ${(a.threshold * 100).toFixed(1)}%
+\`\`\`json
+${JSON.stringify({
+  filename: entry.filename,
+  imageWidth: entry.imageWidth,
+  imageHeight: entry.imageHeight,
+  beforeCorners: b.corners,
+  afterCorners: a.corners
+}, null, 2)}
+\`\`\``;
+  }
+
+  function renderCornerLogsUI() {
+    if (!cornerLogCountBadge || !cornerLogContainer) return;
+    const logs = getCornerLogs();
+    cornerLogCountBadge.textContent = `${logs.length} correction${logs.length === 1 ? '' : 's'}`;
+
+    if (logs.length === 0) {
+      if (btnCopyLatestCornerLog) btnCopyLatestCornerLog.disabled = true;
+      if (btnCopyAllCornerLogs) btnCopyAllCornerLogs.disabled = true;
+      cornerLogContainer.textContent = 'No corner corrections recorded yet. When you adjust corner handles and click "⚡ Re-process Sheet", the before and after coordinates and scoring deltas will be logged here.';
+      return;
+    }
+
+    if (btnCopyLatestCornerLog) btnCopyLatestCornerLog.disabled = false;
+    if (btnCopyAllCornerLogs) btnCopyAllCornerLogs.disabled = false;
+
+    const displayText = logs.slice().reverse().map((entry, idx) => {
+      return `[#${logs.length - idx}] ${entry.filename} (${new Date(entry.timestamp).toLocaleTimeString()})\n` +
+        `  Image: ${entry.imageWidth}x${entry.imageHeight} | Form: ${entry.formVariant}\n` +
+        `  Before: ${entry.before.error ? 'Error: ' + entry.before.error : 'Score: ' + entry.before.score + '% (' + entry.before.points + ' pts)'}\n` +
+        `  After:  Score: ${entry.after.score}% (${entry.after.points} pts) | ID: ${entry.after.studentId} | Form: ${entry.after.testFormCode} | Answers: ${entry.after.answersCount}\n` +
+        `  Corners (TL, TR, BR, BL):\n` +
+        entry.after.deltas.map(d => {
+          if (d.before) {
+            const sx = d.dx >= 0 ? `+${d.dx}` : `${d.dx}`;
+            const sy = d.dy >= 0 ? `+${d.dy}` : `${d.dy}`;
+            return `    ${d.corner}: (${d.before.x}, ${d.before.y}) -> (${d.after.x}, ${d.after.y}) [Δx: ${sx}, Δy: ${sy}, dist: ${d.dist}px]`;
+          }
+          return `    ${d.corner}: -> (${d.after.x}, ${d.after.y})`;
+        }).join('\n');
+    }).join('\n\n' + '—'.repeat(60) + '\n\n');
+
+    cornerLogContainer.textContent = displayText;
+  }
+
+  if (btnCopyLatestCornerLog) {
+    btnCopyLatestCornerLog.addEventListener('click', async () => {
+      const logs = getCornerLogs();
+      if (logs.length === 0) return;
+      const latest = logs[logs.length - 1];
+      const md = formatSingleLogMarkdown(latest);
+      try {
+        await navigator.clipboard.writeText(md);
+        const origText = btnCopyLatestCornerLog.textContent;
+        btnCopyLatestCornerLog.textContent = '✅ Copied!';
+        setTimeout(() => { btnCopyLatestCornerLog.textContent = origText; }, 2000);
+      } catch (err) {
+        alert("Could not copy to clipboard. Log content:\n\n" + md);
+      }
+    });
+  }
+
+  if (btnCopyAllCornerLogs) {
+    btnCopyAllCornerLogs.addEventListener('click', async () => {
+      const logs = getCornerLogs();
+      if (logs.length === 0) return;
+      const allMd = logs.map(formatSingleLogMarkdown).join('\n\n---\n\n');
+      try {
+        await navigator.clipboard.writeText(allMd);
+        const origText = btnCopyAllCornerLogs.textContent;
+        btnCopyAllCornerLogs.textContent = '✅ Copied All!';
+        setTimeout(() => { btnCopyAllCornerLogs.textContent = origText; }, 2000);
+      } catch (err) {
+        alert("Could not copy to clipboard. Log content:\n\n" + allMd);
+      }
+    });
+  }
+
+  if (btnClearCornerLogs) {
+    btnClearCornerLogs.addEventListener('click', () => {
+      if (confirm("Clear all corner correction logs?")) {
+        saveCornerLogs([]);
+        renderCornerLogsUI();
+      }
+    });
+  }
+
+  renderCornerLogsUI();
+
   btnApplyManualCorners.addEventListener('click', async () => {
     const sub = getSelectedSubmission();
     if (!sub || !currentImage || !activeCorners) return;
 
     btnApplyManualCorners.disabled = true;
     btnApplyManualCorners.textContent = '⏳ Processing OMR...';
+
+    // Prepare snapshot of before state
+    const beforeCorners = sub.detectedCorners || sub.corners || null;
+    const beforeError = sub.error || null;
+    const beforeScore = sub.score !== undefined ? sub.score : null;
+    const beforePoints = sub.points !== undefined ? sub.points : null;
+    const beforeStudentId = sub.studentId || '-';
+    const beforeForm = sub.testFormCode || '-';
+    const beforeAnswersCount = sub.answers ? sub.answers.filter(Boolean).length : 0;
+
+    const afterCorners = JSON.parse(JSON.stringify(activeCorners));
 
     try {
       const tempCanvas = document.createElement('canvas');
@@ -481,6 +627,69 @@ export function initInspector(app) {
       sub.scoredStatus = scored.scored;
       delete sub.scoredError;
 
+      // Calculate corner deltas
+      const cornerLabels = ['TL', 'TR', 'BR', 'BL'];
+      const deltas = afterCorners.map((afterPt, idx) => {
+        if (!beforeCorners || !beforeCorners[idx]) {
+          return {
+            corner: cornerLabels[idx],
+            before: null,
+            after: { x: Number(afterPt.x.toFixed(1)), y: Number(afterPt.y.toFixed(1)) },
+            dx: null,
+            dy: null,
+            dist: null
+          };
+        }
+        const beforePt = beforeCorners[idx];
+        const dx = Number((afterPt.x - beforePt.x).toFixed(1));
+        const dy = Number((afterPt.y - beforePt.y).toFixed(1));
+        const dist = Number(Math.hypot(dx, dy).toFixed(1));
+        return {
+          corner: cornerLabels[idx],
+          before: { x: Number(beforePt.x.toFixed(1)), y: Number(beforePt.y.toFixed(1)) },
+          after: { x: Number(afterPt.x.toFixed(1)), y: Number(afterPt.y.toFixed(1)) },
+          dx,
+          dy,
+          dist
+        };
+      });
+
+      const logEntry = {
+        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        timestamp: new Date().toISOString(),
+        filename: sub.filename,
+        imageWidth: currentImage.width,
+        imageHeight: currentImage.height,
+        formVariant: app.state.examConfig.variant === '150' ? '150q' : '75q',
+        before: {
+          status: beforeError ? 'error' : 'detected',
+          error: beforeError,
+          corners: beforeCorners ? beforeCorners.map(p => ({ x: Number(p.x.toFixed(1)), y: Number(p.y.toFixed(1)) })) : null,
+          score: beforeScore,
+          points: beforePoints,
+          studentId: beforeStudentId,
+          testFormCode: beforeForm,
+          answersCount: beforeAnswersCount
+        },
+        after: {
+          status: 'reprocessed_success',
+          corners: afterCorners.map(p => ({ x: Number(p.x.toFixed(1)), y: Number(p.y.toFixed(1)) })),
+          deltas,
+          score: scored.percentage,
+          points: scored.points,
+          studentId: scanResult.studentId || 'Unknown',
+          testFormCode: scanResult.testFormCode || 'A',
+          answersCount: scanResult.answers ? scanResult.answers.filter(Boolean).length : 0,
+          threshold: scanResult.threshold
+        }
+      };
+
+      const existingLogs = getCornerLogs();
+      existingLogs.push(logEntry);
+      saveCornerLogs(existingLogs);
+      console.log('[OpenMCR Corner Correction Log]', logEntry);
+
+      renderCornerLogsUI();
       app.saveState();
       isEditingCorners = false;
       app.renderAll();
@@ -528,6 +737,7 @@ export function initInspector(app) {
 
   return {
     renderInspector,
+    renderCornerLogsUI,
     selectSubmission: (id) => {
       app.state.selectedScanId = id;
       isEditingCorners = false;
