@@ -290,7 +290,7 @@ export function decodeQuestionAnswer(fills, threshold, multiAsF = false, emptyAs
     const rowMean = fills.reduce((a, b) => a + b, 0) / fills.length;
 
     // A bubble is clearly filled if it is significantly above the rest of its row
-    if (top1.val >= 0.23 && top1.val >= threshold * 0.75 && top1.val > top2.val * 1.25 && top1.val > rowMean + 0.04) {
+    if (top1.val >= 0.22 && (top1.val >= top2.val + 0.04 || top1.val >= top2.val * 1.22) && top1.val >= rowMean + 0.035) {
       filledIndexes.push(top1.idx);
     }
   }
