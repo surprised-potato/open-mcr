@@ -57,9 +57,16 @@ export function initResultsTable(app) {
         <td>${scoreBadge}</td>
         <td><code>${sub.threshold ? (sub.threshold * 100).toFixed(1) + '%' : '-'}</code></td>
         <td>
-          <button class="btn btn-sm btn-subtle btn-inspect-row" data-id="${sub.id}">🔍 Inspect</button>
+          <div style="display: flex; gap: 0.35rem;">
+            <button class="btn btn-sm btn-primary btn-view-row" data-id="${sub.id}">🖼️ View</button>
+            <button class="btn btn-sm btn-subtle btn-inspect-row" data-id="${sub.id}">📍 Inspect</button>
+          </div>
         </td>
       `;
+
+      tr.querySelector('.btn-view-row').addEventListener('click', () => {
+        if (app.ui.sheetViewer) app.ui.sheetViewer.openFullscreenViewer(sub.id);
+      });
 
       tr.querySelector('.btn-inspect-row').addEventListener('click', () => {
         app.openInspectorForSubmission(sub.id);

@@ -29,6 +29,7 @@
         <button class="nav-tab-btn active" data-tab="setup" id="tabBtnSetup">⚙️ Setup</button>
         <button class="nav-tab-btn" data-tab="keys" id="tabBtnKeys">🔑 Answer Keys</button>
         <button class="nav-tab-btn" data-tab="scanner" id="tabBtnScanner">📄 Scanner</button>
+        <button class="nav-tab-btn" data-tab="gallery" id="tabBtnGallery">🖼️ Sheet Viewer</button>
         <button class="nav-tab-btn" data-tab="inspector" id="tabBtnInspector">🔍 Inspector</button>
         <button class="nav-tab-btn" data-tab="results" id="tabBtnResults">📊 Grade Roster</button>
         <button class="nav-tab-btn" data-tab="analytics" id="tabBtnAnalytics">📈 Analytics</button>
@@ -138,7 +139,9 @@
             <button class="btn btn-sm" id="btnQuickFillA">Fill All A</button>
             <button class="btn btn-sm" id="btnQuickFillB">Fill All B</button>
             <button class="btn btn-sm" id="btnQuickFillC">Fill All C</button>
-            <button class="btn btn-sm" id="btnClearActiveKey" style="color: var(--pastel-rose-text);">Clear Form</button>
+            <button class="btn btn-sm" id="btnQuickFillD">Fill All D</button>
+            <button class="btn btn-sm" id="btnQuickFillE">Fill All E</button>
+            <button class="btn btn-sm" id="btnClearKey" style="color: var(--pastel-rose-text);">Clear</button>
           </div>
         </div>
 
@@ -191,7 +194,10 @@
         <div style="margin-top: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
             <h3 style="font-size: 0.95rem; font-weight: 600;">Processed Batch Queue (<span id="batchCount">0</span>)</h3>
-            <button class="btn btn-sm" id="btnClearBatch" style="color: var(--pastel-rose-text);">Clear All</button>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-sm" id="btnGoToGallery">🖼️ Open Gallery View</button>
+              <button class="btn btn-sm" id="btnClearBatch" style="color: var(--pastel-rose-text);">Clear All</button>
+            </div>
           </div>
 
           <div class="table-container">
@@ -219,7 +225,48 @@
       </div>
     </section>
 
-    <!-- 4. VISUAL SHEET INSPECTOR PANE -->
+    <!-- 4. SHEET GALLERY & VIEWER PANE -->
+    <section class="tab-pane" id="pane-gallery">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Scanned Sheets Gallery & Viewer</h2>
+            <p class="card-subtitle">Browse all scanned exam sheets stored locally on your device in high resolution</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <span class="badge badge-slate" id="galleryCountBadge">0 Sheets</span>
+          </div>
+        </div>
+
+        <!-- Gallery Toolbar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+          <input type="text" id="inputSearchGallery" class="form-input" placeholder="Search by student name, ID, or file..." style="max-width: 320px;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <label style="font-size: 0.8rem; color: var(--text-secondary);">Filter:</label>
+            <select id="selectFilterGallery" class="form-select" style="width: auto; min-width: 120px;">
+              <option value="all">All Sheets</option>
+              <option value="graded">Graded Only</option>
+              <option value="passing">Passing (≥50%)</option>
+              <option value="failing">Failing (&lt;50%)</option>
+              <option value="error">Errors Only</option>
+            </select>
+            <label style="font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.25rem;">Sort:</label>
+            <select id="selectSortGallery" class="form-select" style="width: auto; min-width: 140px;">
+              <option value="name">Name (A-Z)</option>
+              <option value="score_desc">Score (High to Low)</option>
+              <option value="score_asc">Score (Low to High)</option>
+              <option value="id">Student ID</option>
+              <option value="date_desc">Scan Time (Newest)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Gallery Grid -->
+        <div id="sheetGalleryGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.25rem;"></div>
+      </div>
+    </section>
+
+    <!-- 5. VISUAL SHEET INSPECTOR PANE -->
     <section class="tab-pane" id="pane-inspector">
       <div class="card">
         <div class="card-header">
@@ -314,7 +361,7 @@
       </div>
     </section>
 
-    <!-- 5. RESULTS & ROSTER PANE -->
+    <!-- 6. RESULTS & ROSTER PANE -->
     <section class="tab-pane" id="pane-results">
       <div class="card">
         <div class="card-header">
@@ -348,7 +395,7 @@
             </thead>
             <tbody id="rosterTableBody">
               <tr>
-                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No graded results to show.</td>
+                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No graded sheets yet.</td>
               </tr>
             </tbody>
           </table>
@@ -356,29 +403,25 @@
       </div>
     </section>
 
-    <!-- 6. ANALYTICS PANE -->
+    <!-- 7. ANALYTICS PANE -->
     <section class="tab-pane" id="pane-analytics">
-      <!-- Summary Metrics Grid -->
+      <!-- Stats Overview Cards -->
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-label">Total Submissions</div>
-          <div class="stat-value" id="statCount">0</div>
+          <div class="stat-label">Total Graded</div>
+          <div class="stat-value" id="statTotalGraded">0</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Class Average</div>
-          <div class="stat-value" id="statAverage">0.0%</div>
+          <div class="stat-value" id="statClassAverage">0.0%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Passing Rate (≥50%)</div>
+          <div class="stat-value" id="statPassingRate">0.0%</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Median Score</div>
           <div class="stat-value" id="statMedian">0.0%</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Highest Score</div>
-          <div class="stat-value" id="statMax">0.0%</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Lowest Score</div>
-          <div class="stat-value" id="statMin">0.0%</div>
         </div>
       </div>
 
@@ -421,6 +464,63 @@
 
   </main>
 
+  <!-- Fullscreen Sheet Viewer Modal -->
+  <div class="modal-backdrop" id="modalSheetViewer" style="z-index: 150; padding: 1rem;">
+    <div class="modal-dialog" style="max-width: 1200px; width: 95vw; height: 92vh; display: flex; flex-direction: column; padding: 1rem;">
+      <!-- Modal Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 0.5rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.25rem;">
+            <button class="btn btn-sm" id="btnViewerPrevSheet" title="Previous Sheet (Left Arrow)">◀ Prev</button>
+            <button class="btn btn-sm" id="btnViewerNextSheet" title="Next Sheet (Right Arrow)">Next ▶</button>
+          </div>
+          <span class="badge badge-slate" id="viewerIndexTracker">1 / 1</span>
+          <div>
+            <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0;" id="viewerStudentTitle">Student</h3>
+            <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0;" id="viewerStudentSubtitle">ID: - • File: -</p>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <span class="badge badge-mint" id="viewerScoreBadge">0%</span>
+          <span class="badge badge-sky" id="viewerPointsBadge">0 / 0 pts</span>
+          <span class="badge badge-slate" id="viewerFormBadge">Form A</span>
+          <button class="btn btn-sm btn-subtle" id="btnDownloadViewerImage">📥 Download</button>
+          <button class="btn btn-sm btn-primary" id="btnOpenInspectorFromViewer">📍 Inspect & Align</button>
+          <button class="btn btn-sm" id="btnCloseSheetViewer" style="font-weight: 700;">✕</button>
+        </div>
+      </div>
+
+      <!-- Modal Body (Canvas on Left, Breakdown on Right) -->
+      <div style="display: grid; grid-template-columns: 1fr 320px; gap: 1rem; flex: 1; min-height: 0; margin-top: 0.75rem;">
+        <!-- Left: Image Viewer & Pan/Zoom Controls -->
+        <div style="display: flex; flex-direction: column; min-height: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+              <label><input type="checkbox" id="chkViewerFiducials" checked> Fiducials</label>
+              <label><input type="checkbox" id="chkViewerBubbles" checked> Bubbles</label>
+            </div>
+            <div style="display: flex; gap: 0.25rem;">
+              <button class="btn btn-sm" id="btnViewerZoomIn">➕</button>
+              <button class="btn btn-sm" id="btnViewerZoomOut">➖</button>
+              <button class="btn btn-sm" id="btnViewerZoomReset">100%</button>
+              <button class="btn btn-sm" id="btnViewerZoomFit">Fit</button>
+            </div>
+          </div>
+          <div style="flex: 1; background: #0b1120; border: 1px solid var(--border-color); border-radius: var(--radius-sm); overflow: auto; display: flex; align-items: center; justify-content: center; position: relative;" id="viewerCanvasWrapper">
+            <canvas id="viewerOverlayCanvas" style="max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center center; transition: transform 0.15s ease-out;"></canvas>
+          </div>
+        </div>
+
+        <!-- Right: Question breakdown sidebar -->
+        <div style="display: flex; flex-direction: column; min-height: 0; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem;">
+          <h4 style="font-size: 0.85rem; font-weight: 600; margin: 0 0 0.5rem 0;">Answer Response Audit</h4>
+          <div id="viewerQuestionList" style="flex: 1; overflow-y: auto; padding-right: 0.25rem;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Firebase Cloud Sync Modal -->
   <div class="modal-backdrop" id="firebaseModal">
     <div class="modal-dialog">
@@ -429,7 +529,7 @@
         <button class="btn btn-sm" id="btnCloseFirebaseModal">✕</button>
       </div>
       <p style="font-size: 0.825rem; color: var(--text-secondary); margin-bottom: 1rem;">
-        Connect your Google Firebase Firestore database to automatically sync answer keys, exam configurations, and student score rosters across devices. <em>(Exam scan pictures are NEVER uploaded and remain on your device).</em>
+        Connect your Google Firebase Firestore database to automatically sync answer keys, exam configurations, and student score rosters across devices. <em>(Exam scan pictures are stored locally on your device).</em>
       </p>
 
       <div class="form-group">

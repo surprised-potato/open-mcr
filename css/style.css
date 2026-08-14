@@ -622,3 +622,29 @@ body {
   width: 90%;
   padding: 1.5rem;
 }
+
+/* Sheet Gallery Cards */
+.sheet-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.sheet-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary);
+}
+
+.sheet-thumb-wrap {
+  position: relative;
+  overflow: hidden;
+  background-color: #0b1120;
+}
+
+.sheet-thumb-wrap img {
+  transition: transform 0.25s ease;
+}
+
+.sheet-thumb-wrap:hover img {
+  transform: scale(1.04);
+}
+

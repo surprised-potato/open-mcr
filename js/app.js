@@ -9,6 +9,13 @@ import { initInspector } from './ui/inspector.js';
 import { initResultsTable } from './ui/resultsTable.js';
 import { initAnalytics } from './ui/analytics.js';
 import { initFirebaseModal } from './ui/firebaseModal.js';
+import { initSheetViewer } from './ui/sheetViewer.js';
+import {
+  saveSubmissionsToDB,
+  loadSubmissionsFromDB,
+  deleteSubmissionFromDB,
+  clearSubmissionsFromDB
+} from './storage/localStore.js';
 
 const STORAGE_STATE_KEY = 'openmcr_app_state';
 
@@ -71,7 +78,7 @@ class OpenMCRApp {
       const copy = {
         examConfig: this.state.examConfig,
         answerKeys: this.state.answerKeys,
-        // We only persist metadata and answers to localStorage, keeping images in memory for session privacy
+        // Save metadata to localStorage (without heavy images to prevent quota overflow)
         submissions: this.state.submissions.map(s => {
           const { imageDataUrl, ...rest } = s;
           return rest;
@@ -79,12 +86,15 @@ class OpenMCRApp {
         selectedScanId: this.state.selectedScanId
       };
       localStorage.setItem(STORAGE_STATE_KEY, JSON.stringify(copy));
+
+      // Asynchronously store full submissions including full-resolution scan images in local IndexedDB
+      saveSubmissionsToDB(this.state.submissions);
     } catch (e) {
-      console.warn("Could not persist state to localStorage:", e);
+      console.warn("Could not persist state:", e);
     }
   }
 
-  init() {
+  async init() {
     // 1. Bind Navigation Tabs
     const navButtons = document.querySelectorAll('.nav-tab-btn');
     navButtons.forEach(btn => {
@@ -160,6 +170,17 @@ class OpenMCRApp {
     this.ui.resultsTable = initResultsTable(this);
     this.ui.analytics = initAnalytics(this);
     this.ui.firebaseModal = initFirebaseModal(this);
+    this.ui.sheetViewer = initSheetViewer(this);
+
+    // 4. Restore Full-Resolution Scanned Images from IndexedDB
+    try {
+      const storedSubs = await loadSubmissionsFromDB();
+      if (storedSubs && storedSubs.length > 0) {
+        this.state.submissions = storedSubs;
+      }
+    } catch (e) {
+      console.warn("Could not load stored submissions from IndexedDB:", e);
+    }
 
     // Initial render
     this.renderAll();
@@ -182,6 +203,8 @@ class OpenMCRApp {
       this.renderResults();
     } else if (tabId === 'analytics') {
       this.renderAnalytics();
+    } else if (tabId === 'gallery') {
+      this.renderGallery();
     }
   }
 
@@ -190,6 +213,10 @@ class OpenMCRApp {
     if (this.state.answerKeys[code]) return this.state.answerKeys[code];
     if (this.state.answerKeys['*']) return this.state.answerKeys['*'];
     return Object.values(this.state.answerKeys)[0] || [];
+  }
+
+  getActiveAnswerKey(formCode) {
+    return this.getAnswersForForm(formCode);
   }
 
   scoreExtractedData(data) {
@@ -214,6 +241,24 @@ class OpenMCRApp {
     this.switchTab('inspector');
   }
 
+  deleteSubmission(id) {
+    this.state.submissions = this.state.submissions.filter(s => s.id !== id);
+    if (this.state.selectedScanId === id) {
+      this.state.selectedScanId = this.state.submissions[0] ? this.state.submissions[0].id : null;
+    }
+    deleteSubmissionFromDB(id);
+    this.saveState();
+    this.renderAll();
+  }
+
+  clearAllSubmissions() {
+    this.state.submissions = [];
+    this.state.selectedScanId = null;
+    clearSubmissionsFromDB();
+    this.saveState();
+    this.renderAll();
+  }
+
   renderResults() {
     if (this.ui.resultsTable) this.ui.resultsTable.renderResults();
   }
@@ -226,8 +271,13 @@ class OpenMCRApp {
     if (this.ui.inspector) this.ui.inspector.renderInspector();
   }
 
+  renderGallery() {
+    if (this.ui.sheetViewer) this.ui.sheetViewer.renderGallery();
+  }
+
   renderAll() {
     if (this.ui.scanner) this.ui.scanner.renderBatchTable();
+    this.renderGallery();
     this.renderResults();
     this.renderAnalytics();
     this.renderInspector();
@@ -239,3 +289,4 @@ window.addEventListener('DOMContentLoaded', () => {
   window.openMcrApp = new OpenMCRApp();
   window.openMcrApp.init();
 });
+

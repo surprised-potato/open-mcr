@@ -54,14 +54,8 @@ export function initScanner(app) {
   });
 
   btnClearBatch.addEventListener('click', () => {
-    if (confirm("Clear all scanned sheets in current batch?")) {
-      app.state.submissions = [];
-      app.state.selectedScanId = null;
-      app.saveState();
-      renderBatchTable();
-      app.renderResults();
-      app.renderAnalytics();
-      app.renderInspector();
+    if (confirm("Clear all scanned sheets in current batch from local storage?")) {
+      app.clearAllSubmissions();
     }
   });
 
@@ -374,15 +368,29 @@ export function initScanner(app) {
         <td>${isErr ? '-' : `${sub.points} / ${sub.answers ? sub.answers.length : 75}`}</td>
         <td>${statusBadge}</td>
         <td>
-          <button class="btn btn-sm btn-subtle btn-inspect-sub" data-id="${sub.id}">🔍 Inspect</button>
+          <div style="display: flex; gap: 0.35rem;">
+            <button class="btn btn-sm btn-primary btn-view-sub" data-id="${sub.id}">🖼️ View</button>
+            <button class="btn btn-sm btn-subtle btn-inspect-sub" data-id="${sub.id}">📍 Inspect</button>
+          </div>
         </td>
       `;
+
+      tr.querySelector('.btn-view-sub').addEventListener('click', () => {
+        if (app.ui.sheetViewer) app.ui.sheetViewer.openFullscreenViewer(sub.id);
+      });
 
       tr.querySelector('.btn-inspect-sub').addEventListener('click', () => {
         app.openInspectorForSubmission(sub.id);
       });
 
       scansTableBody.appendChild(tr);
+    });
+  }
+
+  const btnGoToGallery = document.getElementById('btnGoToGallery');
+  if (btnGoToGallery) {
+    btnGoToGallery.addEventListener('click', () => {
+      app.switchTab('gallery');
     });
   }
 
