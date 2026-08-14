@@ -444,60 +444,103 @@ body {
 /* Answer Key Matrix */
 .key-matrix-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 0.6rem;
-  max-height: 450px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+  max-height: 620px;
   overflow-y: auto;
-  padding: 0.5rem 0.2rem;
+  padding: 0.35rem;
+}
+
+.key-column-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.key-column-header {
+  background-color: var(--bg-subtle);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.key-column-body {
+  padding: 0.4rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .key-q-box {
-  background-color: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 0.4rem 0.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.key-q-box:hover {
+  background-color: var(--bg-subtle);
+}
+
+.key-q-box.has-answer {
+  background-color: rgba(79, 70, 229, 0.04);
+  border-color: rgba(79, 70, 229, 0.15);
 }
 
 .key-q-num {
-  font-weight: 600;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  width: 32px;
+  font-weight: 700;
+  font-size: 0.825rem;
+  color: var(--text-main);
+  min-width: 38px;
 }
 
 .key-bubble-btns {
   display: flex;
-  gap: 0.2rem;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .key-bubble-btn {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  border: 1px solid var(--border-color);
+  border: 1.5px solid var(--border-color);
   background-color: var(--bg-card);
   color: var(--text-secondary);
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.1s ease;
+  transition: all 0.15s ease;
+  user-select: none;
 }
 
 .key-bubble-btn:hover {
   border-color: var(--primary);
   color: var(--primary);
+  transform: scale(1.08);
 }
 
 .key-bubble-btn.selected {
   background-color: var(--primary);
-  color: var(--text-inverse);
+  color: #ffffff;
   border-color: var(--primary);
+  box-shadow: 0 2px 5px rgba(79, 70, 229, 0.35);
+  transform: scale(1.05);
 }
 
 /* Analytics Stats Grid */
