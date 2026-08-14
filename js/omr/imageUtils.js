@@ -49,18 +49,37 @@ export function detectEdges(cv, src) {
 export function extractContours(cv, src) {
   const gray = convertToGrayscale(cv, src);
   const smoothed = removeHfNoise(cv, gray);
-  const closed = closeGaps(cv, smoothed);
-  const edges = detectEdges(cv, closed);
+
+  // 1. Binary Otsu mask contours (captures solid filled fiducials: L-mark and square blobs)
+  const thresh = new cv.Mat();
+  cv.threshold(smoothed, thresh, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+  const kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+  cv.morphologyEx(thresh, thresh, cv.MORPH_CLOSE, kernel);
 
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
-  cv.findContours(edges, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
+  cv.findContours(thresh, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
+  // 2. Canny edge contours (captures thin stroke borders and outlines)
+  const closed = closeGaps(cv, smoothed);
+  const edges = detectEdges(cv, closed);
+  const edgeContours = new cv.MatVector();
+  const edgeHierarchy = new cv.Mat();
+  cv.findContours(edges, edgeContours, edgeHierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+  for (let i = 0; i < edgeContours.size(); i++) {
+    contours.push_back(edgeContours.get(i));
+  }
+
+  thresh.delete();
+  kernel.delete();
+  hierarchy.delete();
   edges.delete();
+  edgeHierarchy.delete();
+  edgeContours.delete();
   closed.delete();
   smoothed.delete();
   gray.delete();
-  hierarchy.delete();
 
   return contours;
 }
