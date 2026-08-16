@@ -228,7 +228,7 @@ export function initSheetViewer(app) {
     viewerTitle.textContent = sub.studentName || 'Student';
     viewerSubTitle.textContent = `ID: ${sub.studentId || '-'} • File: ${sub.filename}`;
     viewerFormBadge.textContent = `Form: ${sub.testFormCode || 'A'}`;
-    const totalQ = sub.answers ? sub.answers.length : 75;
+    const totalQ = sub.totalQuestions || (app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : (sub.answers ? sub.answers.length : 75));
     viewerPointsBadge.textContent = sub.error ? 'Error' : `${sub.points || 0} / ${totalQ} pts`;
 
     if (sub.error) {
@@ -283,21 +283,25 @@ export function initSheetViewer(app) {
     }
 
     const activeKey = app.getActiveAnswerKey(sub.testFormCode);
+    const totalQ = sub.totalQuestions || (app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : sub.answers.length);
     viewerQuestionList.innerHTML = '';
 
     sub.answers.forEach((studentAns, qIdx) => {
       const qNum = qIdx + 1;
-      const keyAns = activeKey[qIdx] || '-';
-      const isCorrect = (studentAns === keyAns && Boolean(studentAns));
+      const keyAns = (activeKey && activeKey[qIdx]) ? activeKey[qIdx] : '';
+      if (!keyAns && qNum > totalQ) return; // Skip unkeyed questions beyond test length
+
+      const isScored = Boolean(keyAns);
+      const isCorrect = isScored && (studentAns === keyAns && Boolean(studentAns));
       const isBlank = !studentAns || studentAns === '';
 
       const row = document.createElement('div');
-      row.className = `breakdown-row ${isCorrect ? 'correct' : 'incorrect'}`;
+      row.className = `breakdown-row ${isScored ? (isCorrect ? 'correct' : 'incorrect') : ''}`;
       row.innerHTML = `
         <span style="font-weight: 600;">Q${qNum}</span>
         <span>Student: <strong>${isBlank ? '—' : studentAns}</strong></span>
-        <span>Key: <strong>${keyAns}</strong></span>
-        <span>${isCorrect ? '✅ +1' : '❌ 0'}</span>
+        <span>Key: <strong>${keyAns || '—'}</strong></span>
+        <span>${isScored ? (isCorrect ? '✅ +1' : '❌ 0') : '(Not Scored)'}</span>
       `;
       viewerQuestionList.appendChild(row);
     });

@@ -372,13 +372,14 @@ export function initScanner(app) {
         ? `<span class="badge badge-rose">${sub.error}</span>`
         : `<span class="badge badge-sky">Graded</span>`;
 
+      const totalQ = sub.totalQuestions || (app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : (sub.answers ? sub.answers.length : 75));
       tr.innerHTML = `
         <td><strong>${sub.filename}</strong></td>
         <td><code>${sub.studentId || '-'}</code></td>
         <td>${sub.studentName || '-'}</td>
         <td>${sub.testFormCode || '-'}</td>
         <td>${scoreBadge}</td>
-        <td>${isErr ? '-' : `${sub.points} / ${sub.answers ? sub.answers.length : 75}`}</td>
+        <td>${isErr ? '-' : `${sub.points !== undefined ? sub.points : 0} / ${totalQ}`}</td>
         <td>${statusBadge}</td>
         <td>
           <div style="display: flex; gap: 0.35rem; align-items: center;">

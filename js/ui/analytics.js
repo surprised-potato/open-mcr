@@ -59,7 +59,7 @@ export function initAnalytics(app) {
   function renderAnalytics() {
     const activeExam = app.getActiveExam();
     const validSubs = app.getActiveSubmissions().filter(s => !s.error && s.score !== undefined);
-    const numQ = activeExam.variant === '150' ? 150 : 75;
+    const numQ = app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : (activeExam.variant === '150' ? 150 : 75);
 
     if (statTotalGraded) statTotalGraded.textContent = validSubs.length;
 

@@ -43,11 +43,12 @@ export function initResultsTable(app) {
     }
 
     tableBody.innerHTML = '';
-    const numQ = activeExam.variant === '150' ? 150 : 75;
+    const examNumQ = app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : (activeExam.variant === '150' ? 150 : 75);
 
     submissions.forEach(sub => {
       const tr = document.createElement('tr');
       const isErr = Boolean(sub.error);
+      const totalQ = sub.totalQuestions || examNumQ;
       const scoreBadge = isErr
         ? `<span class="badge badge-rose" title="${sub.error || 'Scan error'}">Error</span>`
         : sub.score >= 70
@@ -58,7 +59,7 @@ export function initResultsTable(app) {
         <td><strong><code>${sub.studentId || '-'}</code></strong></td>
         <td>${sub.studentName || '-'}</td>
         <td><span class="badge badge-slate">${sub.testFormCode || '-'}</span></td>
-        <td>${isErr ? '—' : `${sub.points !== undefined ? sub.points : 0} / ${numQ}`}</td>
+        <td>${isErr ? '—' : `${sub.points !== undefined ? sub.points : 0} / ${totalQ}`}</td>
         <td>${scoreBadge}</td>
         <td><code>${sub.threshold ? (sub.threshold * 100).toFixed(1) + '%' : '-'}</code></td>
         <td>
@@ -85,7 +86,7 @@ export function initResultsTable(app) {
 
   btnExportExcel.addEventListener('click', () => {
     const activeExam = app.getActiveExam();
-    const numQ = activeExam.variant === '150' ? 150 : 75;
+    const numQ = app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : (activeExam.variant === '150' ? 150 : 75);
     exportToExcel(
       activeExam.name,
       app.getActiveSubmissions().filter(s => !s.error),
@@ -96,7 +97,7 @@ export function initResultsTable(app) {
 
   btnExportCsv.addEventListener('click', () => {
     const activeExam = app.getActiveExam();
-    const numQ = activeExam.variant === '150' ? 150 : 75;
+    const numQ = app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : (activeExam.variant === '150' ? 150 : 75);
     exportToCSV(
       activeExam.name,
       app.getActiveSubmissions().filter(s => !s.error),

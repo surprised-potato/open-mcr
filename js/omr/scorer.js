@@ -41,27 +41,43 @@ export function scoreSubmission(submission, answerKeys = {}) {
         q: idx + 1,
         studentAnswer: ans,
         correctAnswer: '?',
-        isCorrect: false
+        isCorrect: false,
+        isScored: false
       }))
     };
   }
 
+  // Count keyed questions in the answer key
+  let keyedCount = 0;
+  let maxKeyedIdx = -1;
+  for (let i = 0; i < keyAnswers.length; i++) {
+    if ((keyAnswers[i] || '').trim() !== '') {
+      keyedCount++;
+      maxKeyedIdx = i;
+    }
+  }
+
+  // If answer key has answers, total score considered is ONLY the number of keyed answers (e.g. 60)
+  const totalQuestions = keyedCount > 0 ? keyedCount : submission.answers.length;
+
   let points = 0;
-  const totalQuestions = submission.answers.length;
+  const numToCheck = maxKeyedIdx >= 0 ? maxKeyedIdx + 1 : submission.answers.length;
   const questionScores = [];
 
-  for (let i = 0; i < totalQuestions; i++) {
+  for (let i = 0; i < numToCheck; i++) {
     const studentAns = (submission.answers[i] || '').trim().toUpperCase();
     const correctAns = (keyAnswers[i] || '').trim().toUpperCase();
-    const isCorrect = Boolean(correctAns && studentAns === correctAns);
+    const isScored = Boolean(correctAns);
+    const isCorrect = Boolean(isScored && studentAns === correctAns);
 
     if (isCorrect) points += 1;
 
     questionScores.push({
       q: i + 1,
       studentAnswer: studentAns,
-      correctAnswer: correctAns,
-      isCorrect
+      correctAnswer: correctAns || '—',
+      isCorrect,
+      isScored
     });
   }
 

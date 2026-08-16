@@ -527,8 +527,27 @@ class OpenMCRApp {
     }
   }
 
+  getActiveExamNumQuestions() {
+    const active = this.getActiveExam();
+    if (!active) return 75;
+    if (active.answerKeys) {
+      let maxKeyed = 0;
+      for (const formCode of Object.keys(active.answerKeys)) {
+        const key = active.answerKeys[formCode] || [];
+        for (let i = 0; i < key.length; i++) {
+          if ((key[i] || '').trim() !== '') {
+            if (i + 1 > maxKeyed) maxKeyed = i + 1;
+          }
+        }
+      }
+      if (maxKeyed > 0) return maxKeyed;
+    }
+    return active.variant === '150' ? 150 : 75;
+  }
+
   getAnswersForForm(formCode) {
     const active = this.getActiveExam();
+    if (!active || !active.answerKeys) return [];
     const code = (formCode || '').trim().toUpperCase();
     if (active.answerKeys[code]) return active.answerKeys[code];
     if (active.answerKeys['*']) return active.answerKeys['*'];
@@ -541,16 +560,18 @@ class OpenMCRApp {
 
   scoreExtractedData(data) {
     const active = this.getActiveExam();
-    return scoreSubmission(data, active.answerKeys);
+    return scoreSubmission(data, active ? active.answerKeys : {});
   }
 
   recalculateAllScores() {
     const active = this.getActiveExam();
+    if (!active) return;
     this.state.submissions.forEach(sub => {
       if (sub.examId === active.id && !sub.error && sub.answers) {
         const scored = this.scoreExtractedData(sub);
         sub.score = scored.percentage;
         sub.points = scored.points;
+        sub.totalQuestions = scored.totalQuestions;
         sub.scoredStatus = scored.scored;
       }
     });

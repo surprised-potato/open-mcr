@@ -159,30 +159,35 @@ export function initInspector(app) {
     studentNameEl.textContent = sub.studentName || (sub.error ? 'Failed to read sheet' : 'Unknown Student');
     studentDetailsEl.textContent = `ID: ${sub.studentId || '-'} • Form: ${sub.testFormCode || '-'} • File: ${sub.filename}`;
     
+    // Render Question Sidebar Breakdown
+    const scored = app.scoreExtractedData(sub);
+    const totalQ = scored.totalQuestions || sub.totalQuestions || (sub.answers ? sub.answers.length : 75);
+
     if (sub.error) {
       scoreBadgeEl.textContent = 'Status: Error';
       scoreBadgeEl.className = 'badge badge-rose';
       inspectErrorBanner.style.display = 'block';
       inspectErrorMessage.textContent = sub.error;
     } else {
-      scoreBadgeEl.textContent = `Score: ${sub.score !== undefined ? sub.score : 0}% (${sub.points || 0} pts)`;
+      scoreBadgeEl.textContent = `Score: ${sub.score !== undefined ? sub.score : 0}% (${sub.points || 0} / ${totalQ} pts)`;
       scoreBadgeEl.className = `badge ${(sub.score >= 70) ? 'badge-mint' : 'badge-rose'}`;
       inspectErrorBanner.style.display = 'none';
     }
 
     thresholdBadgeEl.textContent = `Threshold: ${sub.threshold ? (sub.threshold * 100).toFixed(1) + '%' : '-'}`;
 
-    // Render Question Sidebar Breakdown
-    const scored = app.scoreExtractedData(sub);
     qListEl.innerHTML = '';
     
     if (scored && scored.questionScores && scored.questionScores.length > 0) {
-      scored.questionScores.forEach(qItem => {
+      // Display only scored questions (e.g. Q1..Q60 if 60 answers on test)
+      const visibleScores = scored.questionScores.filter(qItem => qItem.isScored !== false || qItem.q <= totalQ);
+      visibleScores.forEach(qItem => {
+        const isScored = qItem.isScored !== false;
         const row = document.createElement('div');
-        row.className = `breakdown-row ${qItem.isCorrect ? 'correct' : 'incorrect'}`;
+        row.className = `breakdown-row ${isScored ? (qItem.isCorrect ? 'correct' : 'incorrect') : ''}`;
         row.innerHTML = `
           <span><strong>Q${qItem.q}:</strong> Marked <code>${qItem.studentAnswer || '—'}</code></span>
-          <span>Key: <strong>${qItem.correctAnswer || '?'}</strong> ${qItem.isCorrect ? '✓' : '✗'}</span>
+          <span>Key: <strong>${qItem.correctAnswer || '—'}</strong> ${isScored ? (qItem.isCorrect ? '✓' : '✗') : '(Not Scored)'}</span>
         `;
         qListEl.appendChild(row);
       });
