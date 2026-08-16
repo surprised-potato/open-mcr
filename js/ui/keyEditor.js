@@ -217,6 +217,13 @@ export function initKeyEditor(app) {
     });
   }
 
+  const btnProceedToScanner = document.getElementById('btnProceedToScanner');
+  if (btnProceedToScanner) {
+    btnProceedToScanner.addEventListener('click', () => {
+      app.switchTab('scanner');
+    });
+  }
+
   renderKeyMatrix();
 
   return { renderKeyMatrix };

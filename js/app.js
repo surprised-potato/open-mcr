@@ -264,9 +264,19 @@ class OpenMCRApp {
       this.renderResults();
     });
 
-    document.getElementById('btnProceedToKeys').addEventListener('click', () => {
-      this.switchTab('keys');
-    });
+    const btnProceedToKeys = document.getElementById('btnProceedToKeys');
+    if (btnProceedToKeys) {
+      btnProceedToKeys.addEventListener('click', () => {
+        this.switchTab('keys');
+      });
+    }
+
+    const btnProceedToScanner = document.getElementById('btnProceedToScanner');
+    if (btnProceedToScanner) {
+      btnProceedToScanner.addEventListener('click', () => {
+        this.switchTab('scanner');
+      });
+    }
 
     // Immediate initial sync and render from localStorage
     this.syncActiveExamToInputs();
