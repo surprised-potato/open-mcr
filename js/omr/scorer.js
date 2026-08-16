@@ -15,22 +15,34 @@ export function scoreSubmission(submission, answerKeys = {}) {
   }
 
   const formCode = (submission.testFormCode || '').trim().toUpperCase();
-  
+  const hasKeyAnswers = (key) => Array.isArray(key) && key.some(a => (a || '').trim() !== '');
+
   let keyAnswers = null;
   let keyUsed = formCode;
 
-  if (answerKeys && answerKeys[formCode]) {
+  // 1. Check if specific form code exists and has at least one keyed answer
+  if (answerKeys && formCode && hasKeyAnswers(answerKeys[formCode])) {
     keyAnswers = answerKeys[formCode];
-  } else if (answerKeys && answerKeys['*']) {
+    keyUsed = formCode;
+  }
+  // 2. Otherwise fallback to Default Key '*' if it has answers
+  else if (answerKeys && hasKeyAnswers(answerKeys['*'])) {
     keyAnswers = answerKeys['*'];
     keyUsed = '*';
-  } else if (answerKeys && Object.keys(answerKeys).length === 1) {
-    // If only one key exists, use it
-    keyUsed = Object.keys(answerKeys)[0];
-    keyAnswers = answerKeys[keyUsed];
+  }
+  // 3. Otherwise find any key that has answers
+  else if (answerKeys && Object.keys(answerKeys).length > 0) {
+    const populatedEntry = Object.entries(answerKeys).find(([_, k]) => hasKeyAnswers(k));
+    if (populatedEntry) {
+      keyUsed = populatedEntry[0];
+      keyAnswers = populatedEntry[1];
+    } else {
+      keyAnswers = answerKeys[formCode] || answerKeys['*'] || Object.values(answerKeys)[0] || null;
+      keyUsed = formCode || '*';
+    }
   }
 
-  if (!keyAnswers || keyAnswers.length === 0) {
+  if (!keyAnswers || keyAnswers.length === 0 || !hasKeyAnswers(keyAnswers)) {
     return {
       scored: false,
       error: `No matching answer key for form code '${formCode || 'Default'}'`,

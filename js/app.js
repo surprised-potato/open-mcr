@@ -549,9 +549,17 @@ class OpenMCRApp {
     const active = this.getActiveExam();
     if (!active || !active.answerKeys) return [];
     const code = (formCode || '').trim().toUpperCase();
-    if (active.answerKeys[code]) return active.answerKeys[code];
-    if (active.answerKeys['*']) return active.answerKeys['*'];
-    return Object.values(active.answerKeys)[0] || [];
+    const hasKeyAnswers = (key) => Array.isArray(key) && key.some(a => (a || '').trim() !== '');
+
+    if (code && hasKeyAnswers(active.answerKeys[code])) {
+      return active.answerKeys[code];
+    }
+    if (hasKeyAnswers(active.answerKeys['*'])) {
+      return active.answerKeys['*'];
+    }
+    const populated = Object.values(active.answerKeys).find(hasKeyAnswers);
+    if (populated) return populated;
+    return active.answerKeys[code] || active.answerKeys['*'] || Object.values(active.answerKeys)[0] || [];
   }
 
   getActiveAnswerKey(formCode) {

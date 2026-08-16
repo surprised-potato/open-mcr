@@ -115,8 +115,13 @@ export function initKeyEditor(app) {
     }
 
     if (keyStatusSummary) {
-      keyStatusSummary.textContent = `${totalAnswered} / ${numQ} Questions Answered • Form ${activeForm}`;
-      keyStatusSummary.className = (totalAnswered === numQ) ? 'badge badge-mint' : 'badge badge-sky';
+      if (activeForm !== '*' && totalAnswered === 0) {
+        keyStatusSummary.textContent = `0 / ${numQ} Keyed • Form ${activeForm} (Uses Default Key *)`;
+        keyStatusSummary.className = 'badge badge-slate';
+      } else {
+        keyStatusSummary.textContent = `${totalAnswered} / ${numQ} Questions Answered • Form ${activeForm}`;
+        keyStatusSummary.className = (totalAnswered === numQ) ? 'badge badge-mint' : 'badge badge-sky';
+      }
     }
   }
 
