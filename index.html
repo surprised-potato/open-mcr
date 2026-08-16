@@ -236,7 +236,8 @@
         <div style="margin-top: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
             <h3 style="font-size: 0.95rem; font-weight: 600;">Processed Batch Queue (<span id="batchCount">0</span>)</h3>
-            <div style="display: flex; gap: 0.5rem;">
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-sm btn-subtle" id="btnReprocessAll">⚡ Reprocess All Sheets</button>
               <button class="btn btn-sm" id="btnGoToGallery">🖼️ Open Gallery View</button>
               <button class="btn btn-sm" id="btnClearBatch" style="color: var(--pastel-rose-text);">Clear All</button>
             </div>

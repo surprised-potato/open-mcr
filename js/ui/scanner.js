@@ -381,9 +381,10 @@ export function initScanner(app) {
         <td>${isErr ? '-' : `${sub.points} / ${sub.answers ? sub.answers.length : 75}`}</td>
         <td>${statusBadge}</td>
         <td>
-          <div style="display: flex; gap: 0.35rem;">
+          <div style="display: flex; gap: 0.35rem; align-items: center;">
             <button class="btn btn-sm btn-primary btn-view-sub" data-id="${sub.id}">🖼️ View</button>
             <button class="btn btn-sm btn-subtle btn-inspect-sub" data-id="${sub.id}">📍 Inspect</button>
+            <button class="btn btn-sm btn-subtle btn-delete-sub" data-id="${sub.id}" style="color: var(--pastel-rose-text);" title="Delete sheet">🗑️ Delete</button>
           </div>
         </td>
       `;
@@ -396,8 +397,130 @@ export function initScanner(app) {
         app.openInspectorForSubmission(sub.id);
       });
 
+      tr.querySelector('.btn-delete-sub').addEventListener('click', () => {
+        if (confirm(`Delete scanned sheet "${sub.filename}"?`)) {
+          app.deleteSubmission(sub.id);
+        }
+      });
+
       scansTableBody.appendChild(tr);
     });
+  }
+
+  async function reprocessAllSheets() {
+    const list = app.getActiveSubmissions();
+    if (list.length === 0) {
+      alert("No sheets to reprocess in the active exam.");
+      return;
+    }
+
+    const activeExam = app.getActiveExam();
+    const examName = activeExam ? activeExam.name : 'Active Exam';
+    if (!confirm(`Reprocess all ${list.length} sheet(s) in "${examName}" using the latest OMR pipeline and answer keys?`)) {
+      return;
+    }
+
+    const btnReprocessAll = document.getElementById('btnReprocessAll');
+    if (btnReprocessAll) {
+      btnReprocessAll.disabled = true;
+      btnReprocessAll.textContent = '⏳ Reprocessing...';
+    }
+
+    progressContainer.style.display = 'block';
+    progressFill.style.width = '0%';
+    progressPercent.textContent = '0%';
+    progressLabel.textContent = `Reprocessing sheet 1 of ${list.length}...`;
+
+    let completed = 0;
+    let failed = 0;
+
+    for (let i = 0; i < list.length; i++) {
+      const sub = list[i];
+      progressLabel.textContent = `Reprocessing ${i + 1} of ${list.length} (${sub.filename})...`;
+
+      if (!sub.imageDataUrl) {
+        console.warn("Skipping reprocessing for sheet without imageDataUrl:", sub.filename);
+        failed++;
+        completed++;
+        progressFill.style.width = `${Math.round((completed / list.length) * 100)}%`;
+        progressPercent.textContent = `${Math.round((completed / list.length) * 100)}%`;
+        continue;
+      }
+
+      try {
+        const img = new Image();
+        if (typeof sub.imageDataUrl === 'string' && (sub.imageDataUrl.startsWith('http://') || sub.imageDataUrl.startsWith('https://'))) {
+          img.crossOrigin = 'anonymous';
+        }
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = sub.imageDataUrl;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+
+        const scanResult = await processSingleScan({
+          filename: sub.filename,
+          imageData,
+          manualCorners: sub.corners || undefined
+        });
+
+        sub.studentId = scanResult.studentId || 'Unknown';
+        sub.studentName = scanResult.studentName || 'Unknown';
+        sub.testFormCode = scanResult.testFormCode || 'A';
+        sub.courseId = scanResult.courseId || (app.getActiveExam() ? app.getActiveExam().courseId : '') || '';
+        sub.answers = scanResult.answers;
+        sub.threshold = scanResult.threshold;
+        sub.corners = scanResult.corners || sub.corners;
+        sub.lMark = scanResult.lMark;
+        sub.squares = scanResult.squares;
+        sub.annotatedBubbles = scanResult.annotatedBubbles;
+        sub.imageWidth = scanResult.imageWidth;
+        sub.imageHeight = scanResult.imageHeight;
+        delete sub.error;
+
+        const scored = app.scoreExtractedData(sub);
+        sub.score = scored.percentage;
+        sub.points = scored.points;
+        sub.scoredStatus = scored.scored;
+        delete sub.scoredError;
+
+        await saveSingleSubmissionToDB(sub);
+      } catch (err) {
+        console.warn(`Error reprocessing ${sub.filename}:`, err);
+        sub.error = err.message || 'OMR reprocess failed';
+        await saveSingleSubmissionToDB(sub);
+        failed++;
+      }
+
+      completed++;
+      progressFill.style.width = `${Math.round((completed / list.length) * 100)}%`;
+      progressPercent.textContent = `${Math.round((completed / list.length) * 100)}%`;
+    }
+
+    app.saveState();
+    app.renderAll();
+
+    progressLabel.textContent = `Finished reprocessing ${completed} sheet(s)${failed > 0 ? ` (${failed} with errors)` : ''}.`;
+    setTimeout(() => {
+      progressContainer.style.display = 'none';
+      const btnReprocess = document.getElementById('btnReprocessAll');
+      if (btnReprocess) {
+        btnReprocess.disabled = false;
+        btnReprocess.textContent = '⚡ Reprocess All Sheets';
+      }
+    }, 2000);
+  }
+
+  const btnReprocessAll = document.getElementById('btnReprocessAll');
+  if (btnReprocessAll) {
+    btnReprocessAll.addEventListener('click', reprocessAllSheets);
   }
 
   const btnGoToGallery = document.getElementById('btnGoToGallery');
@@ -409,5 +532,5 @@ export function initScanner(app) {
 
   renderBatchTable();
 
-  return { renderBatchTable, handleIncomingFiles, processSingleScan };
+  return { renderBatchTable, handleIncomingFiles, processSingleScan, reprocessAllSheets };
 }
