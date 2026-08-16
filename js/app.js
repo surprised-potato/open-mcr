@@ -309,9 +309,15 @@ class OpenMCRApp {
         const subMap = new Map();
         for (const s of storedSubs) subMap.set(s.id, s);
         for (const s of this.state.submissions) {
-          if (!subMap.has(s.id)) subMap.set(s.id, s);
-          else if (!subMap.get(s.id).imageDataUrl && s.imageDataUrl) {
-            subMap.set(s.id, { ...subMap.get(s.id), imageDataUrl: s.imageDataUrl });
+          if (!subMap.has(s.id)) {
+            subMap.set(s.id, s);
+          } else {
+            const dbSub = subMap.get(s.id);
+            subMap.set(s.id, {
+              ...dbSub,
+              ...s,
+              imageDataUrl: s.imageDataUrl || dbSub.imageDataUrl || null
+            });
           }
         }
         this.state.submissions = Array.from(subMap.values());

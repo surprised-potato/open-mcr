@@ -133,9 +133,20 @@ export async function saveSubmissionsToDB(submissions) {
         resolve();
       };
 
-      store.clear();
       for (const sub of submissions) {
-        store.put(sub);
+        if (!sub.imageDataUrl) {
+          const req = store.get(sub.id);
+          req.onsuccess = () => {
+            const existing = req.result;
+            if (existing && existing.imageDataUrl) {
+              store.put({ ...sub, imageDataUrl: existing.imageDataUrl });
+            } else {
+              store.put(sub);
+            }
+          };
+        } else {
+          store.put(sub);
+        }
       }
     });
   } catch (err) {
@@ -176,7 +187,20 @@ export async function saveSingleSubmissionToDB(sub) {
     return new Promise((resolve) => {
       const tx = db.transaction([STORE_SUBMISSIONS], 'readwrite');
       const store = tx.objectStore(STORE_SUBMISSIONS);
-      store.put(sub);
+
+      if (!sub.imageDataUrl) {
+        const req = store.get(sub.id);
+        req.onsuccess = () => {
+          const existing = req.result;
+          if (existing && existing.imageDataUrl) {
+            store.put({ ...sub, imageDataUrl: existing.imageDataUrl });
+          } else {
+            store.put(sub);
+          }
+        };
+      } else {
+        store.put(sub);
+      }
 
       tx.oncomplete = () => resolve();
       tx.onerror = (e) => {

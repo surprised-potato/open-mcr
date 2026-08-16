@@ -2,6 +2,8 @@
  * inspector.js - Visual canvas sheet inspector with interactive manual corner correction
  */
 
+import { saveSingleSubmissionToDB } from '../storage/localStore.js';
+
 export function initInspector(app) {
   const selectSub = document.getElementById('selectInspectSubmission');
   const canvas = document.getElementById('inspectorCanvas');
@@ -748,11 +750,14 @@ ${JSON.stringify({
     if (!file || !sub) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       sub.imageDataUrl = evt.target.result;
+      await saveSingleSubmissionToDB(sub);
+      app.saveState();
       renderInspector();
     };
     reader.readAsDataURL(file);
+    fileAttachImage.value = '';
   });
 
   chkFiducials.addEventListener('change', drawCanvas);
