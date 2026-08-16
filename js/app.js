@@ -107,25 +107,36 @@ class OpenMCRApp {
   bindStateProxies(stateObj) {
     const self = this;
     Object.defineProperty(stateObj, 'examConfig', {
-      get() { return self.getActiveExam(); },
+      get() {
+        if (self.state) return self.getActiveExam() || (stateObj.exams && stateObj.exams[0]);
+        return (stateObj.exams || []).find(e => e.id === stateObj.activeExamId) || (stateObj.exams && stateObj.exams[0]);
+      },
       configurable: true
     });
     Object.defineProperty(stateObj, 'answerKeys', {
-      get() { return self.getActiveExam().answerKeys; },
-      set(newKeys) { self.getActiveExam().answerKeys = newKeys; },
+      get() {
+        const exam = self.state ? self.getActiveExam() : ((stateObj.exams || []).find(e => e.id === stateObj.activeExamId) || (stateObj.exams && stateObj.exams[0]));
+        return exam ? exam.answerKeys : {};
+      },
+      set(newKeys) {
+        const exam = self.state ? self.getActiveExam() : ((stateObj.exams || []).find(e => e.id === stateObj.activeExamId) || (stateObj.exams && stateObj.exams[0]));
+        if (exam) exam.answerKeys = newKeys;
+      },
       configurable: true
     });
   }
 
   getActiveExam() {
-    return this.state.exams.find(e => e.id === this.state.activeExamId) || this.state.exams[0];
+    const exams = (this.state && this.state.exams) || [];
+    if (exams.length === 0) return null;
+    return exams.find(e => e.id === (this.state && this.state.activeExamId)) || exams[0];
   }
 
   getActiveSubmissions() {
     const active = this.getActiveExam();
-    if (!active) return this.state.submissions;
-    const validExamIds = new Set(this.state.exams.map(e => e.id));
-    return this.state.submissions.filter(s => !s.examId || s.examId === active.id || !validExamIds.has(s.examId));
+    if (!active) return (this.state && this.state.submissions) || [];
+    const validExamIds = new Set(((this.state && this.state.exams) || []).map(e => e.id));
+    return ((this.state && this.state.submissions) || []).filter(s => !s.examId || s.examId === active.id || !validExamIds.has(s.examId));
   }
 
   saveState() {
@@ -253,9 +264,10 @@ class OpenMCRApp {
       this.switchTab('keys');
     });
 
-    document.getElementById('btnProceedToScanner').addEventListener('click', () => {
-      this.switchTab('scanner');
-    });
+    // Immediate initial sync and render from localStorage
+    this.syncActiveExamToInputs();
+    this.renderExamBar();
+    this.renderAllExamsTable();
 
     // 4. Initialize Child Components
     this.ui.keyEditor = initKeyEditor(this);
@@ -270,7 +282,23 @@ class OpenMCRApp {
     try {
       const storedExams = await loadExamsFromDB();
       if (storedExams && storedExams.length > 0) {
-        this.state.exams = storedExams;
+        const examMap = new Map();
+        for (const e of storedExams) examMap.set(e.id, e);
+        if (this.state.exams) {
+          for (const e of this.state.exams) {
+            if (!examMap.has(e.id)) {
+              examMap.set(e.id, e);
+            } else {
+              const dbExam = examMap.get(e.id);
+              const stateTime = new Date(e.updatedAt || 0).getTime();
+              const dbTime = new Date(dbExam.updatedAt || 0).getTime();
+              if (stateTime > dbTime) {
+                examMap.set(e.id, e);
+              }
+            }
+          }
+        }
+        this.state.exams = Array.from(examMap.values());
         if (!this.state.exams.some(e => e.id === this.state.activeExamId)) {
           this.state.activeExamId = this.state.exams[0].id;
         }
@@ -298,6 +326,7 @@ class OpenMCRApp {
 
   syncActiveExamToInputs() {
     const active = this.getActiveExam();
+    if (!active) return;
     const inputExamName = document.getElementById('inputExamName');
     const selectVariant = document.getElementById('selectFormVariant');
     const inputCourseId = document.getElementById('inputCourseId');
@@ -314,6 +343,7 @@ class OpenMCRApp {
 
     this.renderExamBar();
     this.renderAllExamsTable();
+    if (this.ui.keyEditor) this.ui.keyEditor.renderKeyMatrix();
   }
 
   createExam(title, variant = '75', courseId = '') {
@@ -402,20 +432,29 @@ class OpenMCRApp {
 
     if (select) {
       select.innerHTML = '';
-      this.state.exams.forEach(exam => {
-        const count = this.state.submissions.filter(s => s.examId === exam.id).length;
+      const exams = (this.state && this.state.exams) || [];
+      if (exams.length === 0) {
         const opt = document.createElement('option');
-        opt.value = exam.id;
-        opt.textContent = `${exam.name} (${count} sheets)`;
-        if (exam.id === this.state.activeExamId) opt.selected = true;
+        opt.value = '';
+        opt.textContent = 'No exams available';
         select.appendChild(opt);
-      });
+      } else {
+        exams.forEach(exam => {
+          const count = (this.state.submissions || []).filter(s => s.examId === exam.id).length;
+          const opt = document.createElement('option');
+          opt.value = exam.id;
+          opt.textContent = `${exam.name} (${count} sheets)`;
+          if (exam.id === (active ? active.id : this.state.activeExamId)) opt.selected = true;
+          select.appendChild(opt);
+        });
+      }
     }
 
     const activeCount = this.getActiveSubmissions().length;
     if (sheetCountBadge) sheetCountBadge.textContent = `${activeCount} Sheets`;
-    if (variantBadge) variantBadge.textContent = active.variant === '150' ? '150 Questions' : '75 Questions';
-    if (mainVariantBadge) mainVariantBadge.textContent = active.variant === '150' ? '150 Questions' : '75 Questions';
+    const variantText = (active && active.variant === '150') ? '150 Questions' : '75 Questions';
+    if (variantBadge) variantBadge.textContent = variantText;
+    if (mainVariantBadge) mainVariantBadge.textContent = variantText;
   }
 
   renderAllExamsTable() {
@@ -555,13 +594,14 @@ class OpenMCRApp {
   }
 
   renderAll() {
-    this.renderExamBar();
-    this.renderAllExamsTable();
-    if (this.ui.scanner) this.ui.scanner.renderBatchTable();
-    this.renderGallery();
-    this.renderResults();
-    this.renderAnalytics();
-    this.renderInspector();
+    try { this.renderExamBar(); } catch (e) { console.error("renderExamBar error:", e); }
+    try { this.renderAllExamsTable(); } catch (e) { console.error("renderAllExamsTable error:", e); }
+    try { if (this.ui.keyEditor) this.ui.keyEditor.renderKeyMatrix(); } catch (e) { console.error("renderKeyMatrix error:", e); }
+    try { if (this.ui.scanner) this.ui.scanner.renderBatchTable(); } catch (e) { console.error("renderBatchTable error:", e); }
+    try { this.renderGallery(); } catch (e) { console.error("renderGallery error:", e); }
+    try { this.renderResults(); } catch (e) { console.error("renderResults error:", e); }
+    try { this.renderAnalytics(); } catch (e) { console.error("renderAnalytics error:", e); }
+    try { this.renderInspector(); } catch (e) { console.error("renderInspector error:", e); }
   }
 }
 

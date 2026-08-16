@@ -35,12 +35,25 @@ export function openDatabase() {
       }
     };
 
+    const timer = setTimeout(() => {
+      console.warn("IndexedDB open timed out, proceeding with localStorage.");
+      resolve(null);
+    }, 2000);
+
+    request.onblocked = () => {
+      clearTimeout(timer);
+      console.warn("IndexedDB open blocked by another tab.");
+      resolve(null);
+    };
+
     request.onsuccess = (event) => {
+      clearTimeout(timer);
       dbInstance = event.target.result;
       resolve(dbInstance);
     };
 
     request.onerror = (event) => {
+      clearTimeout(timer);
       console.warn("IndexedDB open error:", event.target.error);
       resolve(null); // Fallback gracefully
     };

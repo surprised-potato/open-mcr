@@ -36,7 +36,7 @@ export function initInspector(app) {
   let currentImage = null;
   let zoomScale = 1.0;
   let isEditingCorners = false;
-  activeCorners = null; // Array of 4 points: [TL, TR, BR, BL]
+  let activeCorners = null; // Array of 4 points: [TL, TR, BR, BL]
   let draggingCornerIdx = -1;
 
   function navigateSheet(delta) {
