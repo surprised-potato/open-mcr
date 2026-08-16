@@ -141,6 +141,10 @@ class OpenMCRApp {
 
   saveState() {
     try {
+      const active = this.getActiveExam();
+      if (active) {
+        active.updatedAt = new Date().toISOString();
+      }
       const copy = {
         activeExamId: this.state.activeExamId,
         exams: this.state.exams,

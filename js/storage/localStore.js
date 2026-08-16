@@ -63,9 +63,9 @@ export function openDatabase() {
 export async function saveExamsToDB(exams) {
   try {
     const db = await openDatabase();
-    if (!db) return;
+    if (!db || !exams) return;
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const tx = db.transaction([STORE_EXAMS], 'readwrite');
       const store = tx.objectStore(STORE_EXAMS);
 
@@ -79,13 +79,33 @@ export async function saveExamsToDB(exams) {
         resolve();
       };
 
-      store.clear();
       for (const exam of exams) {
         store.put(exam);
       }
     });
   } catch (err) {
     console.warn("Error saving exams to IndexedDB:", err);
+  }
+}
+
+export async function saveSingleExamToDB(exam) {
+  try {
+    const db = await openDatabase();
+    if (!db || !exam) return;
+
+    return new Promise((resolve) => {
+      const tx = db.transaction([STORE_EXAMS], 'readwrite');
+      const store = tx.objectStore(STORE_EXAMS);
+      store.put(exam);
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => {
+        console.warn("IndexedDB save single exam error:", e.target.error);
+        resolve();
+      };
+    });
+  } catch (err) {
+    console.warn("Error saving single exam to IndexedDB:", err);
   }
 }
 
