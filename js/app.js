@@ -25,6 +25,38 @@ import {
 
 const STORAGE_STATE_KEY = 'openmcr_app_state';
 
+function hasRealKeyAnswers(keyArr) {
+  return Array.isArray(keyArr) && keyArr.some(a => (a || '').trim() !== '');
+}
+
+function isLegacyDummyAllA(keyArr) {
+  return Array.isArray(keyArr) && keyArr.length >= 70 && keyArr.every(ans => ans === 'A');
+}
+
+function sanitizeAndMergeAnswerKeys(primaryKeys = {}, backupKeys = {}, numQ = 75) {
+  const allForms = new Set([...Object.keys(primaryKeys || {}), ...Object.keys(backupKeys || {}), '*', 'A']);
+  const result = {};
+
+  for (const form of allForms) {
+    let pKey = primaryKeys ? primaryKeys[form] : null;
+    let bKey = backupKeys ? backupKeys[form] : null;
+
+    if (isLegacyDummyAllA(pKey)) pKey = null;
+    if (isLegacyDummyAllA(bKey)) bKey = null;
+
+    let chosenKey = hasRealKeyAnswers(pKey) ? pKey : (hasRealKeyAnswers(bKey) ? bKey : (pKey || bKey || []));
+
+    const norm = Array(numQ).fill('');
+    for (let i = 0; i < numQ; i++) {
+      norm[i] = (chosenKey && chosenKey[i] && ['A', 'B', 'C', 'D', 'E'].includes(chosenKey[i].toUpperCase()))
+        ? chosenKey[i].toUpperCase()
+        : '';
+    }
+    result[form] = norm;
+  }
+  return result;
+}
+
 class OpenMCRApp {
   constructor() {
     this.state = this.loadInitialState();
@@ -71,6 +103,17 @@ class OpenMCRApp {
             exams = [defaultExam];
           }
         }
+
+        // Cleanse and restore answer keys for each exam
+        exams.forEach(exam => {
+          const numQ = exam.variant === '150' ? 150 : 75;
+          let backupKeys = null;
+          try {
+            const raw = localStorage.getItem(`openmcr_keys_${exam.id}`);
+            if (raw) backupKeys = JSON.parse(raw);
+          } catch (_) {}
+          exam.answerKeys = sanitizeAndMergeAnswerKeys(exam.answerKeys, backupKeys, numQ);
+        });
 
         const activeExamId = parsed.activeExamId && exams.some(e => e.id === parsed.activeExamId)
           ? parsed.activeExamId
@@ -147,6 +190,9 @@ class OpenMCRApp {
       const active = this.getActiveExam();
       if (active) {
         active.updatedAt = new Date().toISOString();
+        if (active.answerKeys) {
+          localStorage.setItem(`openmcr_keys_${active.id}`, JSON.stringify(active.answerKeys));
+        }
       }
       const copy = {
         activeExamId: this.state.activeExamId,
@@ -202,8 +248,8 @@ class OpenMCRApp {
     if (btnRenameExam) {
       btnRenameExam.addEventListener('click', () => {
         const active = this.getActiveExam();
-        const newTitle = prompt("Rename active exam title:", active.name);
-        if (newTitle && newTitle.trim() && newTitle.trim() !== active.name) {
+        const newTitle = prompt("Rename active exam:", active ? active.name : '');
+        if (newTitle && newTitle.trim()) {
           this.renameActiveExam(newTitle.trim());
         }
       });
@@ -211,11 +257,12 @@ class OpenMCRApp {
 
     if (btnDeleteExam) {
       btnDeleteExam.addEventListener('click', () => {
-        this.deleteActiveExam();
+        const active = this.getActiveExam();
+        if (active) this.deleteExam(active.id);
       });
     }
 
-    // 3. Bind Setup Inputs
+    // 3. Bind Setup Pane Form Inputs
     const inputExamName = document.getElementById('inputExamName');
     const selectVariant = document.getElementById('selectFormVariant');
     const inputCourseId = document.getElementById('inputCourseId');
@@ -224,9 +271,7 @@ class OpenMCRApp {
     const chkSortByName = document.getElementById('chkSortByName');
 
     inputExamName.addEventListener('input', () => {
-      this.getActiveExam().name = inputExamName.value;
-      this.saveState();
-      this.renderExamBar();
+      this.renameActiveExam(inputExamName.value);
     });
 
     selectVariant.addEventListener('change', () => {
@@ -306,18 +351,37 @@ class OpenMCRApp {
       const storedExams = await loadExamsFromDB();
       if (storedExams && storedExams.length > 0) {
         const examMap = new Map();
-        for (const e of storedExams) examMap.set(e.id, e);
+        for (const dbExam of storedExams) {
+          const numQ = dbExam.variant === '150' ? 150 : 75;
+          let backupKeys = null;
+          try {
+            const raw = localStorage.getItem(`openmcr_keys_${dbExam.id}`);
+            if (raw) backupKeys = JSON.parse(raw);
+          } catch (_) {}
+          dbExam.answerKeys = sanitizeAndMergeAnswerKeys(dbExam.answerKeys, backupKeys, numQ);
+          examMap.set(dbExam.id, dbExam);
+        }
+
         if (this.state.exams) {
-          for (const e of this.state.exams) {
-            if (!examMap.has(e.id)) {
-              examMap.set(e.id, e);
+          for (const stateExam of this.state.exams) {
+            const numQ = stateExam.variant === '150' ? 150 : 75;
+            let backupKeys = null;
+            try {
+              const raw = localStorage.getItem(`openmcr_keys_${stateExam.id}`);
+              if (raw) backupKeys = JSON.parse(raw);
+            } catch (_) {}
+            stateExam.answerKeys = sanitizeAndMergeAnswerKeys(stateExam.answerKeys, backupKeys, numQ);
+
+            if (!examMap.has(stateExam.id)) {
+              examMap.set(stateExam.id, stateExam);
             } else {
-              const dbExam = examMap.get(e.id);
-              const stateTime = new Date(e.updatedAt || 0).getTime();
+              const dbExam = examMap.get(stateExam.id);
+              const mergedKeys = sanitizeAndMergeAnswerKeys(stateExam.answerKeys, dbExam.answerKeys, numQ);
+              const stateTime = new Date(stateExam.updatedAt || 0).getTime();
               const dbTime = new Date(dbExam.updatedAt || 0).getTime();
-              if (stateTime > dbTime) {
-                examMap.set(e.id, e);
-              }
+              const winner = stateTime >= dbTime ? { ...dbExam, ...stateExam } : { ...stateExam, ...dbExam };
+              winner.answerKeys = mergedKeys;
+              examMap.set(stateExam.id, winner);
             }
           }
         }

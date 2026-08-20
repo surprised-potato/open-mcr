@@ -332,10 +332,27 @@ export function initKeyEditor(app) {
           throw new Error("No valid answer keys could be extracted from the file.");
         }
 
+        // If only 1 form was keyed, sync with default key if blank
+        const keyedEntries = Object.entries(activeExam.answerKeys).filter(([_, k]) => k && k.some(Boolean));
+        if (keyedEntries.length === 1) {
+          const [singleForm, singleKey] = keyedEntries[0];
+          if (!activeExam.answerKeys['*'] || !activeExam.answerKeys['*'].some(Boolean)) {
+            activeExam.answerKeys['*'] = [...singleKey];
+          }
+          if (!activeExam.answerKeys['A'] || !activeExam.answerKeys['A'].some(Boolean)) {
+            activeExam.answerKeys['A'] = [...singleKey];
+          }
+          selectKeyForm.value = singleForm;
+        } else if (keyedEntries.length > 1) {
+          selectKeyForm.value = keyedEntries[0][0];
+        }
+
+        // Dedicated backup in localStorage and IndexedDB
+        localStorage.setItem(`openmcr_keys_${activeExam.id}`, JSON.stringify(activeExam.answerKeys));
         app.saveState();
         renderKeyMatrix();
         app.recalculateAllScores();
-        alert(`Answer Keys Uploaded Successfully!\n\n${importedSummary.join('\n')}\n\nAll existing answers were overridden and unkeyed items were left blank.`);
+        alert(`Answer Keys Uploaded Successfully!\n\n${importedSummary.join('\n')}\n\nAll previous answers were overridden and unkeyed items were left blank.`);
       } catch (err) {
         alert(`Failed to import answer key: ${err.message}`);
       } finally {
