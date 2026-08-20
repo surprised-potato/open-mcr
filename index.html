@@ -361,10 +361,11 @@
                 <button class="btn btn-sm btn-subtle" id="btnToggleEditCorners">📍 Edit Corners</button>
                 <button class="btn btn-sm btn-primary" id="btnApplyManualCorners" style="display: none;">⚡ Re-process Sheet</button>
                 <button class="btn btn-sm btn-subtle" id="btnResetCorners" style="display: none;">Reset Handles</button>
-                <div style="display: flex; gap: 0.2rem; margin-left: 0.5rem;">
+                <div style="display: flex; gap: 0.25rem; margin-left: 0.5rem; align-items: center;">
                   <button class="btn btn-sm" id="btnZoomIn" title="Zoom In">➕</button>
                   <button class="btn btn-sm" id="btnZoomOut" title="Zoom Out">➖</button>
-                  <button class="btn btn-sm" id="btnZoomReset">Reset</button>
+                  <span id="inspectZoomLevel" style="font-size: 0.75rem; color: var(--text-secondary); min-width: 40px; text-align: center; font-weight: 600;">100%</span>
+                  <button class="btn btn-sm" id="btnZoomReset" title="Reset Zoom">Reset</button>
                 </div>
               </div>
             </div>

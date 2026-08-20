@@ -35,11 +35,85 @@ export function initInspector(app) {
   const btnNext = document.getElementById('btnInspectNextSheet');
   const indexTracker = document.getElementById('inspectIndexTracker');
 
+  const canvasWrapper = document.getElementById('canvasWrapper');
+  const btnZoomIn = document.getElementById('btnZoomIn');
+  const btnZoomOut = document.getElementById('btnZoomOut');
+  const btnZoomReset = document.getElementById('btnZoomReset');
+  const inspectZoomLevel = document.getElementById('inspectZoomLevel');
+
   let currentImage = null;
   let zoomScale = 1.0;
   let isEditingCorners = false;
   let activeCorners = null; // Array of 4 points: [TL, TR, BR, BL]
   let draggingCornerIdx = -1;
+  let isPanning = false;
+  let panStartX = 0;
+  let panStartY = 0;
+  let panScrollLeft = 0;
+  let panScrollTop = 0;
+
+  function updateCanvasDimensions() {
+    if (!currentImage) {
+      canvas.width = 600;
+      canvas.height = 400;
+      canvas.style.width = '100%';
+      canvas.style.maxWidth = '600px';
+      canvas.style.height = 'auto';
+      if (inspectZoomLevel) inspectZoomLevel.textContent = '100%';
+      return;
+    }
+
+    if (canvas.width !== currentImage.width || canvas.height !== currentImage.height) {
+      canvas.width = currentImage.width;
+      canvas.height = currentImage.height;
+    }
+
+    const wrapW = canvasWrapper ? Math.max(280, canvasWrapper.clientWidth - 24) : 700;
+    const wrapH = canvasWrapper ? Math.max(280, canvasWrapper.clientHeight - 24) : 600;
+
+    const baseScale = Math.min(wrapW / currentImage.width, wrapH / currentImage.height);
+    const displayW = Math.round(currentImage.width * baseScale * zoomScale);
+    const displayH = Math.round(currentImage.height * baseScale * zoomScale);
+
+    canvas.style.width = `${displayW}px`;
+    canvas.style.height = `${displayH}px`;
+    canvas.style.maxWidth = 'none';
+    canvas.style.maxHeight = 'none';
+
+    if (inspectZoomLevel) {
+      inspectZoomLevel.textContent = `${Math.round(zoomScale * 100)}%`;
+    }
+  }
+
+  function setZoom(newScale, centerPoint = null) {
+    const clamped = Math.max(0.4, Math.min(4.0, Number(newScale.toFixed(2))));
+    if (Math.abs(clamped - zoomScale) < 0.001) return;
+
+    const oldScale = zoomScale;
+    zoomScale = clamped;
+
+    if (canvasWrapper && currentImage) {
+      const prevScrollX = canvasWrapper.scrollLeft;
+      const prevScrollY = canvasWrapper.scrollTop;
+      const ratio = zoomScale / oldScale;
+
+      updateCanvasDimensions();
+      drawCanvas();
+
+      if (centerPoint) {
+        canvasWrapper.scrollLeft = (centerPoint.x + prevScrollX) * ratio - centerPoint.x;
+        canvasWrapper.scrollTop = (centerPoint.y + prevScrollY) * ratio - centerPoint.y;
+      } else {
+        const centerX = prevScrollX + canvasWrapper.clientWidth / 2;
+        const centerY = prevScrollY + canvasWrapper.clientHeight / 2;
+        canvasWrapper.scrollLeft = centerX * ratio - canvasWrapper.clientWidth / 2;
+        canvasWrapper.scrollTop = centerY * ratio - canvasWrapper.clientHeight / 2;
+      }
+    } else {
+      updateCanvasDimensions();
+      drawCanvas();
+    }
+  }
 
   function navigateSheet(delta) {
     const list = app.getActiveSubmissions();
@@ -144,8 +218,7 @@ export function initInspector(app) {
       isEditingCorners = false;
       updateCornerUIState();
 
-      canvas.width = 600;
-      canvas.height = 400;
+      updateCanvasDimensions();
       ctx.fillStyle = '#f8fafc';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#94a3b8';
@@ -270,8 +343,7 @@ export function initInspector(app) {
     if (!sub.imageDataUrl) {
       attachImageContainer.style.display = 'block';
       currentImage = null;
-      canvas.width = 600;
-      canvas.height = 400;
+      updateCanvasDimensions();
       ctx.fillStyle = '#f8fafc';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#ef4444';
@@ -293,8 +365,7 @@ export function initInspector(app) {
     updateCornerUIState();
 
     // Clear stale placeholder & show loading state on canvas
-    canvas.width = 600;
-    canvas.height = 400;
+    updateCanvasDimensions();
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#64748b';
@@ -316,8 +387,7 @@ export function initInspector(app) {
       console.error("Failed to load scan image into canvas:", err);
       attachImageContainer.style.display = 'block';
       currentImage = null;
-      canvas.width = 600;
-      canvas.height = 400;
+      updateCanvasDimensions();
       ctx.fillStyle = '#f8fafc';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#ef4444';
@@ -341,12 +411,9 @@ export function initInspector(app) {
     const sub = getSelectedSubmission();
     if (!sub) return;
 
-    canvas.width = currentImage.width * zoomScale;
-    canvas.height = currentImage.height * zoomScale;
+    updateCanvasDimensions();
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.scale(zoomScale, zoomScale);
 
     // 1. Draw raw scan
     ctx.drawImage(currentImage, 0, 0);
@@ -356,11 +423,11 @@ export function initInspector(app) {
 
     // 2. Draw Fiducial Marks / Interactive Manual Corners
     if ((chkFiducials.checked || isEditingCorners) && activeCorners && activeCorners.length === 4) {
-      // Quadrilateral outline
-      ctx.lineWidth = Math.max(2, 3 / zoomScale);
+      const lineWidth = Math.max(3, currentImage.width / 350);
+      ctx.lineWidth = lineWidth;
       ctx.strokeStyle = isEditingCorners ? '#f59e0b' : '#4f46e5';
       if (isEditingCorners) {
-        ctx.setLineDash([8 / zoomScale, 4 / zoomScale]);
+        ctx.setLineDash([lineWidth * 3, lineWidth * 1.5]);
       } else {
         ctx.setLineDash([]);
       }
@@ -374,7 +441,7 @@ export function initInspector(app) {
       ctx.setLineDash([]);
 
       // Corner handle nodes (TL, TR, BR, BL)
-      const handleRadius = Math.max(7, 12 / zoomScale);
+      const handleRadius = Math.max(12, currentImage.width / 65);
       const cornerColors = ['#ef4444', '#3b82f6', '#22c55e', '#a855f7'];
       const cornerLabels = ['TL', 'TR', 'BR', 'BL'];
 
@@ -389,7 +456,7 @@ export function initInspector(app) {
 
         ctx.fillStyle = cornerColors[idx];
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = Math.max(1.5, 2.5 / zoomScale);
+        ctx.lineWidth = Math.max(2, lineWidth * 0.8);
         ctx.beginPath();
         ctx.arc(c.x, c.y, handleRadius, 0, 2 * Math.PI);
         ctx.fill();
@@ -397,7 +464,8 @@ export function initInspector(app) {
 
         // Label
         ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${Math.max(9, Math.round(11 / zoomScale))}px Inter, sans-serif`;
+        const fontSize = Math.max(11, Math.round(handleRadius * 0.85));
+        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(cornerLabels[idx], c.x, c.y);
@@ -408,7 +476,6 @@ export function initInspector(app) {
     if (chkBubbles.checked && sub.annotatedBubbles && !isEditingCorners) {
       sub.annotatedBubbles.forEach(b => {
         if (b.type === 'question') {
-          const qScore = scored.questionScores ? scored.questionScores[b.qNumber - 1] : null;
           const isCorrectChoice = keyAnswers && keyAnswers[b.qNumber - 1] === b.choice;
 
           if (b.isFilled) {
@@ -419,7 +486,7 @@ export function initInspector(app) {
               ctx.fillStyle = 'rgba(239, 68, 68, 0.55)';
               ctx.strokeStyle = '#dc2626';
             }
-            ctx.lineWidth = 2;
+            ctx.lineWidth = Math.max(2, currentImage.width / 500);
             ctx.beginPath();
             ctx.arc(b.center.x, b.center.y, b.radius, 0, 2 * Math.PI);
             ctx.fill();
@@ -428,7 +495,7 @@ export function initInspector(app) {
 
           if (chkLabels.checked && isCorrectChoice && !b.isFilled) {
             ctx.strokeStyle = '#0284c7';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = Math.max(2.5, currentImage.width / 400);
             ctx.setLineDash([4, 2]);
             ctx.beginPath();
             ctx.arc(b.center.x, b.center.y, b.radius + 2, 0, 2 * Math.PI);
@@ -438,7 +505,7 @@ export function initInspector(app) {
         } else if (b.type === 'metadata' && b.isFilled) {
           ctx.fillStyle = 'rgba(168, 85, 247, 0.45)';
           ctx.strokeStyle = '#7c3aed';
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = Math.max(1.5, currentImage.width / 600);
           ctx.beginPath();
           ctx.arc(b.center.x, b.center.y, b.radius, 0, 2 * Math.PI);
           ctx.fill();
@@ -446,8 +513,6 @@ export function initInspector(app) {
         }
       });
     }
-
-    ctx.restore();
   }
 
   // Pointer & Dragging Helpers for Canvas
@@ -486,40 +551,83 @@ export function initInspector(app) {
     return -1;
   }
 
-  // Mouse & Touch Event Listeners for Corner Dragging
+  // Mouse & Touch Event Listeners for Corner Dragging & Panning
   function handlePointerDown(e) {
-    if (!isEditingCorners || !currentImage) return;
+    if (!currentImage) return;
     const pt = getCanvasCoords(e);
-    const idx = findCornerUnderPoint(pt);
-    if (idx !== -1) {
-      draggingCornerIdx = idx;
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+
+    if (isEditingCorners) {
+      const idx = findCornerUnderPoint(pt);
+      if (idx !== -1) {
+        draggingCornerIdx = idx;
+        canvas.style.cursor = 'grabbing';
+        drawCanvas();
+        e.preventDefault();
+        return;
+      }
+    }
+
+    // Drag-to-pan when clicking canvas background
+    if (e.button === 0 || e.button === 1 || (e.touches && e.touches.length > 0)) {
+      isPanning = true;
+      panStartX = clientX;
+      panStartY = clientY;
+      if (canvasWrapper) {
+        panScrollLeft = canvasWrapper.scrollLeft;
+        panScrollTop = canvasWrapper.scrollTop;
+      }
       canvas.style.cursor = 'grabbing';
-      drawCanvas();
-      e.preventDefault();
+      if (canvasWrapper) canvasWrapper.style.cursor = 'grabbing';
     }
   }
 
   function handlePointerMove(e) {
-    if (!isEditingCorners || !currentImage) return;
-    const pt = getCanvasCoords(e);
+    if (!currentImage) return;
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
 
-    if (draggingCornerIdx !== -1) {
+    if (draggingCornerIdx !== -1 && isEditingCorners) {
+      const pt = getCanvasCoords(e);
       activeCorners[draggingCornerIdx].x = Math.max(0, Math.min(currentImage.width, pt.x));
       activeCorners[draggingCornerIdx].y = Math.max(0, Math.min(currentImage.height, pt.y));
       canvas.style.cursor = 'grabbing';
       drawCanvas();
       e.preventDefault();
-    } else {
+      return;
+    }
+
+    if (isPanning && canvasWrapper) {
+      const dx = clientX - panStartX;
+      const dy = clientY - panStartY;
+      canvasWrapper.scrollLeft = panScrollLeft - dx;
+      canvasWrapper.scrollTop = panScrollTop - dy;
+      e.preventDefault();
+      return;
+    }
+
+    if (isEditingCorners) {
+      const pt = getCanvasCoords(e);
       const idx = findCornerUnderPoint(pt);
-      canvas.style.cursor = idx !== -1 ? 'grab' : 'default';
+      canvas.style.cursor = idx !== -1 ? 'grab' : (zoomScale > 1.0 ? 'grab' : 'default');
+      if (canvasWrapper) canvasWrapper.style.cursor = idx !== -1 ? 'grab' : (zoomScale > 1.0 ? 'grab' : 'default');
+    } else {
+      canvas.style.cursor = zoomScale > 1.0 ? 'grab' : 'default';
+      if (canvasWrapper) canvasWrapper.style.cursor = zoomScale > 1.0 ? 'grab' : 'default';
     }
   }
 
   function handlePointerUp() {
     if (draggingCornerIdx !== -1) {
       draggingCornerIdx = -1;
-      canvas.style.cursor = 'grab';
+      canvas.style.cursor = isEditingCorners ? 'grab' : 'default';
       drawCanvas();
+    }
+    if (isPanning) {
+      isPanning = false;
+      canvas.style.cursor = isEditingCorners ? 'default' : (zoomScale > 1.0 ? 'grab' : 'default');
+      if (canvasWrapper) canvasWrapper.style.cursor = 'default';
     }
   }
 
@@ -530,6 +638,29 @@ export function initInspector(app) {
   canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
   window.addEventListener('touchmove', handlePointerMove, { passive: false });
   window.addEventListener('touchend', handlePointerUp);
+
+  if (canvasWrapper) {
+    canvasWrapper.addEventListener('wheel', (e) => {
+      // Zoom with wheel
+      if (e.ctrlKey || e.metaKey || !isEditingCorners) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.15 : -0.15;
+        const rect = canvasWrapper.getBoundingClientRect();
+        const mousePos = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+        setZoom(zoomScale + delta, mousePos);
+      }
+    }, { passive: false });
+  }
+
+  window.addEventListener('resize', () => {
+    if (zoomScale === 1.0 && currentImage) {
+      updateCanvasDimensions();
+      drawCanvas();
+    }
+  });
 
   // Button Interactions
   selectSub.addEventListener('change', (e) => {
@@ -840,15 +971,25 @@ ${JSON.stringify({
   chkBubbles.addEventListener('change', drawCanvas);
   chkLabels.addEventListener('change', drawCanvas);
 
-  document.getElementById('btnZoomIn').addEventListener('click', () => {
-    zoomScale = Math.min(2.5, zoomScale + 0.2);
-    drawCanvas();
-  });
+  if (btnZoomIn) {
+    btnZoomIn.addEventListener('click', () => setZoom(zoomScale + 0.25));
+  }
 
-  document.getElementById('btnZoomOut').addEventListener('click', () => {
-    zoomScale = Math.max(0.4, zoomScale - 0.2);
-    drawCanvas();
-  });
+  if (btnZoomOut) {
+    btnZoomOut.addEventListener('click', () => setZoom(zoomScale - 0.25));
+  }
+
+  if (btnZoomReset) {
+    btnZoomReset.addEventListener('click', () => {
+      zoomScale = 1.0;
+      updateCanvasDimensions();
+      drawCanvas();
+      if (canvasWrapper) {
+        canvasWrapper.scrollLeft = (canvasWrapper.scrollWidth - canvasWrapper.clientWidth) / 2;
+        canvasWrapper.scrollTop = (canvasWrapper.scrollHeight - canvasWrapper.clientHeight) / 2;
+      }
+    });
+  }
 
   if (btnPrev) btnPrev.addEventListener('click', () => navigateSheet(-1));
   if (btnNext) btnNext.addEventListener('click', () => navigateSheet(1));
