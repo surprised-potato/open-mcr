@@ -621,7 +621,7 @@ class OpenMCRApp {
     }
   }
 
-  applySubmissionOverride(subId, overrides) {
+  applySubmissionOverride(subId, overrides, options = {}) {
     const sub = this.state.submissions.find(s => s.id === subId);
     if (!sub) return;
 
@@ -648,9 +648,20 @@ class OpenMCRApp {
     sub.scoredStatus = scored.scored;
     delete sub.scoredError;
 
-    saveSingleSubmissionToDB(sub);
-    this.saveState();
-    this.renderAll();
+    if (options.debounce) {
+      clearTimeout(this._subOverrideSaveTimer);
+      this._subOverrideSaveTimer = setTimeout(() => {
+        saveSingleSubmissionToDB(sub);
+        this.saveState();
+      }, 200);
+    } else {
+      saveSingleSubmissionToDB(sub);
+      this.saveState();
+    }
+
+    if (!options.skipRender) {
+      this.renderAll();
+    }
   }
 
   resetSubmissionOverride(subId) {

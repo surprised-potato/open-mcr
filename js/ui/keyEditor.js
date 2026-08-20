@@ -13,6 +13,49 @@ export function initKeyEditor(app) {
     return activeExam.variant === '150' ? 150 : 75;
   }
 
+  let saveDebounceTimer = null;
+
+  function flushPendingSave() {
+    if (saveDebounceTimer) {
+      clearTimeout(saveDebounceTimer);
+      saveDebounceTimer = null;
+      app.saveState();
+      app.recalculateAllScores();
+    }
+  }
+
+  function queueSaveAndRecalculate() {
+    clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = setTimeout(() => {
+      saveDebounceTimer = null;
+      app.saveState();
+      app.recalculateAllScores();
+    }, 200);
+  }
+
+  function updateStatusSummary(currentKey, numQ, activeForm) {
+    if (!keyStatusSummary) return;
+    const totalAnswered = currentKey.filter(k => (k || '').trim() !== '').length;
+    if (activeForm !== '*' && totalAnswered === 0) {
+      keyStatusSummary.textContent = `0 / ${numQ} Keyed • Form ${activeForm} (Uses Default Key *)`;
+      keyStatusSummary.className = 'badge badge-slate';
+    } else {
+      keyStatusSummary.textContent = `${totalAnswered} / ${numQ} Questions Answered • Form ${activeForm}`;
+      keyStatusSummary.className = (totalAnswered === numQ) ? 'badge badge-mint' : 'badge badge-sky';
+    }
+  }
+
+  function updateColumnBadge(col, startQ, endQ, currentKey) {
+    const colBadge = document.getElementById(`colBadge_${col}`);
+    if (!colBadge) return;
+    let colAnswered = 0;
+    for (let i = startQ; i < endQ; i++) {
+      if ((currentKey[i] || '').trim() !== '') colAnswered++;
+    }
+    colBadge.textContent = `${colAnswered} / ${endQ - startQ}`;
+    colBadge.className = colAnswered === (endQ - startQ) ? 'badge badge-mint' : 'badge badge-slate';
+  }
+
   function renderKeyMatrix() {
     const numQ = getNumQuestions();
     const activeForm = selectKeyForm.value;
@@ -29,7 +72,7 @@ export function initKeyEditor(app) {
       if (currentKey.length < numQ) {
         currentKey.push(...Array(numQ - currentKey.length).fill(''));
       } else {
-        currentKey.length = numQ;
+        activeExam.answerKeys[activeForm] = currentKey.slice(0, numQ);
       }
     }
 
@@ -37,8 +80,6 @@ export function initKeyEditor(app) {
     const choices = ['A', 'B', 'C', 'D', 'E'];
     const perColumn = activeExam.variant === '150' ? 30 : 15;
     const numColumns = Math.ceil(numQ / perColumn);
-
-    let totalAnswered = 0;
 
     for (let col = 0; col < numColumns; col++) {
       const startQ = col * perColumn;
@@ -59,17 +100,12 @@ export function initKeyEditor(app) {
       const colBody = document.createElement('div');
       colBody.className = 'key-column-body';
 
-      let colAnswered = 0;
-
       for (let i = startQ; i < endQ; i++) {
         const qBox = document.createElement('div');
         const currentVal = (currentKey[i] || '').toUpperCase();
-        if (currentVal) {
-          totalAnswered++;
-          colAnswered++;
-        }
 
         qBox.className = `key-q-box ${currentVal ? 'has-answer' : ''}`;
+        qBox.id = `keyQBox_${i}`;
 
         const qNum = document.createElement('span');
         qNum.className = 'key-q-num';
@@ -85,16 +121,8 @@ export function initKeyEditor(app) {
           btn.className = `key-bubble-btn ${currentVal === ch ? 'selected' : ''}`;
           btn.textContent = ch;
           btn.title = `Question ${i + 1}: Choice ${ch}`;
-          btn.addEventListener('click', () => {
-            if (currentKey[i] === ch) {
-              currentKey[i] = ''; // toggle off
-            } else {
-              currentKey[i] = ch;
-            }
-            app.saveState();
-            renderKeyMatrix();
-            app.recalculateAllScores();
-          });
+          btn.dataset.q = i;
+          btn.dataset.choice = ch;
           btnsGroup.appendChild(btn);
         });
 
@@ -102,31 +130,55 @@ export function initKeyEditor(app) {
         colBody.appendChild(qBox);
       }
 
-      const colBadge = colCard.querySelector(`#colBadge_${col}`);
-      if (colBadge) {
-        colBadge.textContent = `${colAnswered} / ${endQ - startQ}`;
-        if (colAnswered === (endQ - startQ)) {
-          colBadge.className = 'badge badge-mint';
-        }
-      }
-
       colCard.appendChild(colBody);
       container.appendChild(colCard);
+
+      updateColumnBadge(col, startQ, endQ, currentKey);
     }
 
-    if (keyStatusSummary) {
-      if (activeForm !== '*' && totalAnswered === 0) {
-        keyStatusSummary.textContent = `0 / ${numQ} Keyed • Form ${activeForm} (Uses Default Key *)`;
-        keyStatusSummary.className = 'badge badge-slate';
-      } else {
-        keyStatusSummary.textContent = `${totalAnswered} / ${numQ} Questions Answered • Form ${activeForm}`;
-        keyStatusSummary.className = (totalAnswered === numQ) ? 'badge badge-mint' : 'badge badge-sky';
-      }
-    }
+    updateStatusSummary(currentKey, numQ, activeForm);
   }
+
+  // Delegated Matrix Click Listener for Ultra-Fast Zero-Lag Response
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('.key-bubble-btn');
+    if (!btn) return;
+
+    const qIdx = parseInt(btn.dataset.q, 10);
+    const ch = btn.dataset.choice;
+    const activeForm = selectKeyForm.value;
+    const activeExam = app.getActiveExam();
+    const numQ = getNumQuestions();
+    const currentKey = activeExam.answerKeys[activeForm];
+
+    const isSame = (currentKey[qIdx] === ch);
+    const newVal = isSame ? '' : ch;
+    currentKey[qIdx] = newVal;
+
+    // 1. Instant DOM class toggle without rebuilding
+    const qBox = document.getElementById(`keyQBox_${qIdx}`);
+    if (qBox) {
+      qBox.querySelectorAll('.key-bubble-btn').forEach(b => {
+        b.classList.toggle('selected', b === btn && !isSame);
+      });
+      qBox.classList.toggle('has-answer', Boolean(newVal));
+    }
+
+    // 2. Instant header counter and summary update
+    const perColumn = activeExam.variant === '150' ? 30 : 15;
+    const col = Math.floor(qIdx / perColumn);
+    const startQ = col * perColumn;
+    const endQ = Math.min(numQ, (col + 1) * perColumn);
+    updateColumnBadge(col, startQ, endQ, currentKey);
+    updateStatusSummary(currentKey, numQ, activeForm);
+
+    // 3. Debounced disk save & background scoring recalculation
+    queueSaveAndRecalculate();
+  });
 
   // Event Listeners
   selectKeyForm.addEventListener('change', () => {
+    flushPendingSave();
     renderKeyMatrix();
   });
 
@@ -135,8 +187,30 @@ export function initKeyEditor(app) {
     const numQ = getNumQuestions();
     const activeExam = app.getActiveExam();
     activeExam.answerKeys[activeForm] = Array(numQ).fill(choice);
+    
+    // Quick DOM update
+    const choices = ['A', 'B', 'C', 'D', 'E'];
+    for (let i = 0; i < numQ; i++) {
+      const qBox = document.getElementById(`keyQBox_${i}`);
+      if (qBox) {
+        qBox.querySelectorAll('.key-bubble-btn').forEach(b => {
+          b.classList.toggle('selected', b.dataset.choice === choice);
+        });
+        qBox.classList.toggle('has-answer', Boolean(choice));
+      }
+    }
+
+    const perColumn = activeExam.variant === '150' ? 30 : 15;
+    const numColumns = Math.ceil(numQ / perColumn);
+    for (let col = 0; col < numColumns; col++) {
+      const startQ = col * perColumn;
+      const endQ = Math.min(numQ, (col + 1) * perColumn);
+      updateColumnBadge(col, startQ, endQ, activeExam.answerKeys[activeForm]);
+    }
+    updateStatusSummary(activeExam.answerKeys[activeForm], numQ, activeForm);
+
+    flushPendingSave();
     app.saveState();
-    renderKeyMatrix();
     app.recalculateAllScores();
   }
 

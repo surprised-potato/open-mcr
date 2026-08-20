@@ -228,12 +228,35 @@ export function initInspector(app) {
             if (!sub.answers) sub.answers = [];
             while (sub.answers.length <= qIdx) sub.answers.push('');
 
-            const updatedAnswers = [...sub.answers];
-            updatedAnswers[qIdx] = newOpt;
+            sub.answers[qIdx] = newOpt;
 
-            app.applySubmissionOverride(sub.id, {
-              answers: updatedAnswers
+            // 1. Instant local DOM highlight
+            row.querySelectorAll('.sidebar-opt-btn').forEach(b => {
+              b.classList.toggle('active', b.dataset.opt === newOpt);
             });
+
+            // 2. Instant row correctness state
+            const isNowCorrect = isScored && (newOpt !== '' && newOpt === keyAns);
+            row.className = `breakdown-row ${isScored ? (isNowCorrect ? 'correct' : 'incorrect') : ''}`;
+            const keyLabel = row.querySelector('span');
+            if (keyLabel) {
+              keyLabel.innerHTML = `Key: <strong>${keyAns}</strong> ${isScored ? (isNowCorrect ? '✓' : '✗') : ''}`;
+            }
+
+            // 3. Instant score calculation and badge update
+            const newScored = app.scoreExtractedData(sub);
+            sub.score = newScored.percentage;
+            sub.points = newScored.points;
+            sub.totalQuestions = newScored.totalQuestions;
+            if (scoreBadgeEl) {
+              scoreBadgeEl.textContent = `Score: ${sub.score !== undefined ? sub.score : 0}% (${sub.points || 0} / ${totalQ} pts)`;
+              scoreBadgeEl.className = `badge ${(sub.score >= 70) ? 'badge-mint' : 'badge-rose'}`;
+            }
+
+            // 4. Debounced storage save in background without disrupting current view
+            app.applySubmissionOverride(sub.id, {
+              answers: sub.answers
+            }, { debounce: true, skipRender: true });
           });
         });
 
