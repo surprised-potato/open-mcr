@@ -801,54 +801,93 @@ export function initAnalytics(app) {
         });
       }
 
-      // Visual Stacked Distractor Bar
+      // Visual Difficulty Mini-Gauge
+      let pBarColor = '#0ea5e9';
+      if (q.pPercent >= 85) pBarColor = '#10b981';
+      else if (q.pPercent >= 50) pBarColor = '#0ea5e9';
+      else if (q.pPercent >= 30) pBarColor = '#f59e0b';
+      else pBarColor = '#ef4444';
+
+      // Visual Discrimination Gauge
+      let dBarColor = '#64748b';
+      if (q.dIndex >= 0.40) dBarColor = '#10b981';
+      else if (q.dIndex >= 0.30) dBarColor = '#0ea5e9';
+      else if (q.dIndex >= 0.15) dBarColor = '#94a3b8';
+      else if (q.dIndex < 0) dBarColor = '#ef4444';
+      const dPercentWidth = Math.min(100, Math.max(5, Math.round(Math.abs(q.dIndex) * 100)));
+
+      // Visual Horizontal Bar Chart for Distractors
       const totalN = Math.max(1, q.totalN);
-      let distractorSegments = '';
-      const letters = ['A', 'B', 'C', 'D', 'E', 'other'];
+      let distractorBarsHtml = '<div class="distractor-bars-grid">';
+      const letters = ['A', 'B', 'C', 'D', 'E'];
+      if (q.counts.other > 0) letters.push('other');
 
       letters.forEach(opt => {
         const count = q.counts[opt] || 0;
-        if (count === 0) return;
         const pct = Math.round((count / totalN) * 100);
         const isKey = (opt === q.correctAns);
         const isTrap = q.distractorTraps.some(t => t.opt === opt);
 
-        let segClass = 'standard-distractor';
-        if (isKey) segClass = 'correct-key';
-        else if (isTrap) segClass = 'trap';
-        else if (opt === 'other') segClass = 'empty-distractor';
+        let badgeClass = 'standard';
+        let barClass = 'standard';
+        let badgeLabel = opt === 'other' ? '∅' : opt;
 
-        const optDisplay = opt === 'other' ? '∅' : opt;
-        distractorSegments += `
-          <div class="distractor-segment ${segClass}" style="width: ${pct}%;" title="Option ${optDisplay}: ${count} student(s) (${pct}%)${isKey ? ' [CORRECT KEY]' : ''}">
-            ${pct >= 8 ? `${optDisplay} (${pct}%)` : (pct >= 5 ? optDisplay : '')}
+        if (isKey) {
+          badgeClass = 'key';
+          barClass = 'key';
+          badgeLabel = `${opt} ✓`;
+        } else if (isTrap) {
+          badgeClass = 'trap';
+          barClass = 'trap';
+          badgeLabel = `${opt} 🪤`;
+        } else if (opt === 'other') {
+          badgeClass = 'empty';
+          barClass = 'empty';
+        }
+
+        distractorBarsHtml += `
+          <div class="distractor-bar-row">
+            <span class="distractor-opt-badge ${badgeClass}" title="${isKey ? 'Correct Key' : (isTrap ? 'Misleading Trap' : 'Choice Option')}">${badgeLabel}</span>
+            <div class="distractor-bar-track">
+              <div class="distractor-bar-fill ${barClass}" style="width: ${pct}%;"></div>
+            </div>
+            <span class="distractor-bar-val">${pct}% <span class="distractor-bar-count">(${count})</span></span>
           </div>
         `;
       });
+      distractorBarsHtml += '</div>';
 
       tr.innerHTML = `
-        <td><strong>Q${q.qNum}</strong></td>
-        <td><span class="badge badge-sky" style="font-weight: 700;">${q.correctAns || '?'}</span></td>
-        <td>
-          <div style="display: flex; align-items: center; gap: 0.4rem;">
-            <span class="badge ${pBadge}" style="font-weight: 700;">${q.pPercent}%</span>
-            <span style="font-size: 0.72rem; color: var(--text-secondary);">${pLabel}</span>
+        <td style="vertical-align: middle;"><strong>Q${q.qNum}</strong></td>
+        <td style="vertical-align: middle;"><span class="badge badge-sky" style="font-weight: 700; font-size: 0.9rem;">${q.correctAns || '?'}</span></td>
+        <td style="vertical-align: middle;">
+          <div class="metric-mini-gauge">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span class="badge ${pBadge}" style="font-weight: 700;">${q.pPercent}%</span>
+              <span style="font-size: 0.72rem; color: var(--text-secondary);">${pLabel}</span>
+            </div>
+            <div class="metric-mini-bar-track">
+              <div class="metric-mini-bar-fill" style="width: ${q.pPercent}%; background-color: ${pBarColor};"></div>
+            </div>
           </div>
         </td>
-        <td>
-          <div style="display: flex; align-items: center; gap: 0.4rem;">
-            <span class="badge ${dBadge}" style="font-weight: 700;">${q.dIndex >= 0 ? '+' : ''}${q.dIndex}</span>
-            <span style="font-size: 0.72rem; color: var(--text-secondary);">${dRating}</span>
+        <td style="vertical-align: middle;">
+          <div class="metric-mini-gauge">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span class="badge ${dBadge}" style="font-weight: 700;">${q.dIndex >= 0 ? '+' : ''}${q.dIndex}</span>
+              <span style="font-size: 0.72rem; color: var(--text-secondary);">${dRating}</span>
+            </div>
+            <div class="metric-mini-bar-track">
+              <div class="metric-mini-bar-fill" style="width: ${dPercentWidth}%; background-color: ${dBarColor};"></div>
+            </div>
           </div>
         </td>
-        <td><code>${q.rPbis >= 0 ? '+' : ''}${q.rPbis}</code></td>
-        <td>
-          <div class="distractor-stack">
-            ${distractorSegments}
-          </div>
+        <td style="vertical-align: middle;"><code>${q.rPbis >= 0 ? '+' : ''}${q.rPbis}</code></td>
+        <td style="vertical-align: middle;">
+          ${distractorBarsHtml}
         </td>
-        <td>
-          <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+        <td style="vertical-align: middle;">
+          <div style="display: flex; gap: 0.35rem; flex-direction: column; align-items: flex-start;">
             ${flagBadges.join(' ')}
           </div>
         </td>

@@ -417,19 +417,55 @@ export function initSheetViewer(app) {
 
     // 2. Layer: Bubble overlays
     if (chkViewerBubbles && chkViewerBubbles.checked && sub && sub.annotatedBubbles) {
+      const activeExam = app.getActiveExam();
+      const keyAnswers = (activeExam && activeExam.answerKeys)
+        ? (activeExam.answerKeys[sub.testFormCode || 'A'] || activeExam.answerKeys['*'] || [])
+        : [];
+      const lineWidth = Math.max(2, img.width / 500);
+
       sub.annotatedBubbles.forEach(b => {
-        vCtx.lineWidth = 3;
-        if (b.filled) {
-          vCtx.strokeStyle = '#22c55e';
-          vCtx.fillStyle = 'rgba(34, 197, 94, 0.4)';
-        } else {
-          vCtx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
-          vCtx.fillStyle = 'transparent';
+        const cx = (b.center && b.center.x !== undefined) ? b.center.x : b.x;
+        const cy = (b.center && b.center.y !== undefined) ? b.center.y : b.y;
+        if (cx === undefined || cy === undefined) return;
+        const radius = b.radius || 12;
+        const isFilled = Boolean(b.isFilled || b.filled);
+
+        if (b.type === 'question') {
+          const isCorrectChoice = keyAnswers && keyAnswers[b.qNumber - 1] === b.choice;
+
+          if (isFilled) {
+            if (isCorrectChoice) {
+              vCtx.fillStyle = 'rgba(34, 197, 94, 0.55)';
+              vCtx.strokeStyle = '#16a34a';
+            } else {
+              vCtx.fillStyle = 'rgba(239, 68, 68, 0.55)';
+              vCtx.strokeStyle = '#dc2626';
+            }
+            vCtx.lineWidth = lineWidth;
+            vCtx.beginPath();
+            vCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+            vCtx.fill();
+            vCtx.stroke();
+          } else if (isCorrectChoice) {
+            // Highlight expected correct key with dashed blue ring
+            vCtx.strokeStyle = '#0284c7';
+            vCtx.lineWidth = lineWidth + 0.5;
+            vCtx.setLineDash([4, 2]);
+            vCtx.beginPath();
+            vCtx.arc(cx, cy, radius + 2, 0, Math.PI * 2);
+            vCtx.stroke();
+            vCtx.setLineDash([]);
+          }
+        } else if (b.type === 'metadata' && isFilled) {
+          // Metadata bubbles (Name, ID, Form Code)
+          vCtx.fillStyle = 'rgba(168, 85, 247, 0.45)';
+          vCtx.strokeStyle = '#7c3aed';
+          vCtx.lineWidth = Math.max(1.5, img.width / 600);
+          vCtx.beginPath();
+          vCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+          vCtx.fill();
+          vCtx.stroke();
         }
-        vCtx.beginPath();
-        vCtx.arc(b.x, b.y, b.radius || 12, 0, Math.PI * 2);
-        vCtx.fill();
-        vCtx.stroke();
       });
     }
 

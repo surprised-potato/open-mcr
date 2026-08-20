@@ -896,53 +896,133 @@ body {
   opacity: 0.9;
 }
 
-/* Distractor Stacked Visual Bar */
-.distractor-stack {
+/* Distractor Horizontal Bar Chart Styles */
+.distractor-bars-grid {
   display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
   width: 100%;
-  height: 22px;
-  border-radius: var(--radius-sm, 6px);
-  overflow: hidden;
-  background-color: var(--bg-card-subtle, #f1f5f9);
-  border: 1px solid var(--border-color);
+  min-width: 240px;
+  padding: 0.2rem 0;
 }
 
-.distractor-segment {
-  height: 100%;
+.distractor-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+}
+
+.distractor-opt-badge {
+  width: 28px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.65rem;
+  border-radius: 4px;
   font-weight: 700;
-  color: #ffffff;
-  transition: width 0.3s ease;
-  position: relative;
-  overflow: hidden;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  cursor: default;
+  font-size: 0.72rem;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
 }
 
-.distractor-segment.correct-key {
-  background-color: #10b981;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+.distractor-opt-badge.key {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.4);
 }
 
-.distractor-segment.trap {
-  background-color: #ef4444;
+.distractor-opt-badge.trap {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
-.distractor-segment.standard-distractor {
-  background-color: #64748b;
-}
-
-.distractor-segment.empty-distractor {
-  background-color: #cbd5e1;
+.distractor-opt-badge.standard {
+  background-color: rgba(100, 116, 139, 0.12);
   color: #475569;
-  text-shadow: none;
+  border: 1px solid rgba(100, 116, 139, 0.25);
 }
 
-.distractor-segment:hover {
-  filter: brightness(1.15);
+.distractor-opt-badge.empty {
+  background-color: rgba(203, 213, 225, 0.25);
+  color: #64748b;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+}
+
+.distractor-bar-track {
+  flex: 1;
+  height: 9px;
+  background-color: var(--bg-card-subtle, #f1f5f9);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid var(--border-color, #e2e8f0);
+}
+
+.distractor-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.distractor-bar-fill.key {
+  background: linear-gradient(90deg, #10b981, #059669);
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.25);
+}
+
+.distractor-bar-fill.trap {
+  background: linear-gradient(90deg, #f87171, #ef4444);
+  box-shadow: 0 1px 2px rgba(239, 68, 68, 0.25);
+}
+
+.distractor-bar-fill.standard {
+  background: linear-gradient(90deg, #94a3b8, #64748b);
+}
+
+.distractor-bar-fill.empty {
+  background-color: #cbd5e1;
+}
+
+.distractor-bar-val {
+  min-width: 55px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-main);
+  text-align: right;
+  flex-shrink: 0;
+  font-feature-settings: "tnum";
+}
+
+.distractor-bar-count {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 0.68rem;
+  margin-left: 0.15rem;
+}
+
+/* Metric Visual Micro-Gauges in Item Table */
+.metric-mini-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 110px;
+}
+
+.metric-mini-bar-track {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-card-subtle, #f1f5f9);
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 1px solid var(--border-color, #e2e8f0);
+}
+
+.metric-mini-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
 }
 
 /* Filter Pill Buttons */
