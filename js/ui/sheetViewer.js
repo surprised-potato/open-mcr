@@ -71,7 +71,9 @@ export function initSheetViewer(app) {
       );
     }
 
-    if (filter === 'graded') {
+    if (filter === 'flagged') {
+      list = list.filter(s => app.isSubmissionFlagged(s));
+    } else if (filter === 'graded') {
       list = list.filter(s => !s.error);
     } else if (filter === 'error') {
       list = list.filter(s => Boolean(s.error));
@@ -106,11 +108,13 @@ export function initSheetViewer(app) {
     }
 
     if (list.length === 0) {
+      const filter = selectFilterGallery ? selectFilterGallery.value : 'all';
+      const emptyMsg = filter === 'flagged' ? '🎉 No sheets require review!' : 'No Scanned Sheets Found';
       galleryGrid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 3.5rem 1rem;">
-          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🖼️</div>
-          <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.25rem;">No Scanned Sheets Found</h3>
-          <p style="font-size: 0.85rem;">Upload or scan exam sheets in the <strong>Scanner</strong> tab to view them here.</p>
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">${filter === 'flagged' ? '✅' : '🖼️'}</div>
+          <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.25rem;">${emptyMsg}</h3>
+          <p style="font-size: 0.85rem;">${filter === 'flagged' ? 'All student answers are cleanly detected without ambiguity.' : 'Upload or scan exam sheets in the <strong>Scanner</strong> tab to view them here.'}</p>
         </div>`;
       return;
     }
@@ -129,16 +133,27 @@ export function initSheetViewer(app) {
       card.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
 
       const isErr = Boolean(sub.error);
+      const isFlagged = app.isSubmissionFlagged(sub);
       const scoreBadgeClass = isErr ? 'badge-rose' : sub.score >= 70 ? 'badge-mint' : sub.score >= 50 ? 'badge-sky' : 'badge-amber';
       const scoreText = isErr ? 'Error' : `${sub.score !== undefined ? sub.score + '%' : 'Graded'}`;
+
+      if (isFlagged && !isErr) {
+        card.style.borderColor = 'var(--pastel-amber-border, #fcd34d)';
+      }
 
       const thumbUrl = sub.imageDataUrl || 'assets/sample_exam_scan.png';
       const examName = sub.examName || (app.state.exams.find(e => e.id === sub.examId) || activeExam).name;
 
+      let flagTag = '';
+      if (isFlagged && !isErr) {
+        flagTag = '<span class="badge badge-flag-amber" style="font-size: 0.7rem;">⚠️ Needs Review</span>';
+      }
+
       card.innerHTML = `
         <div style="position: relative; width: 100%; height: 210px; background: #0f172a; border-radius: var(--radius-sm); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer;" class="sheet-thumb-wrap">
           <img src="${thumbUrl}" alt="${sub.filename}" style="width: 100%; height: 100%; object-fit: contain; transition: transform 0.25s ease;">
-          <div style="position: absolute; top: 0.5rem; right: 0.5rem;">
+          <div style="position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.25rem;">
+            ${flagTag}
             <span class="badge ${scoreBadgeClass}">${scoreText}</span>
           </div>
           <div style="position: absolute; bottom: 0.5rem; left: 0.5rem; display: flex; gap: 0.25rem; flex-wrap: wrap;">

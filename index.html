@@ -307,8 +307,9 @@
               <option value="all">All Exams</option>
             </select>
             <label style="font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.25rem;">Filter:</label>
-            <select id="selectFilterGallery" class="form-select" style="width: auto; min-width: 120px;">
+            <select id="selectFilterGallery" class="form-select" style="width: auto; min-width: 130px;">
               <option value="all">All Sheets</option>
+              <option value="flagged">⚠️ Needs Review</option>
               <option value="graded">Graded Only</option>
               <option value="passing">Passing (≥50%)</option>
               <option value="failing">Failing (&lt;50%)</option>
@@ -320,13 +321,13 @@
               <option value="score_desc">Score (High to Low)</option>
               <option value="score_asc">Score (Low to High)</option>
               <option value="id">Student ID</option>
-              <option value="date_desc">Scan Time (Newest)</option>
+              <option value="date_desc">Scan Date (Newest)</option>
             </select>
           </div>
         </div>
 
         <!-- Gallery Grid -->
-        <div id="sheetGalleryGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.25rem;"></div>
+        <div class="gallery-grid" id="sheetGalleryGrid"></div>
       </div>
     </section>
 
@@ -342,9 +343,11 @@
             <button class="btn btn-sm" id="btnInspectPrevSheet" title="Previous Sheet (Left Arrow Key)">◀ Prev</button>
             <span id="inspectIndexTracker" style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); padding: 0 0.25rem; white-space: nowrap;">0 / 0</span>
             <button class="btn btn-sm" id="btnInspectNextSheet" title="Next Sheet (Right Arrow Key)">Next ▶</button>
+            <button class="btn btn-sm" id="btnInspectNextFlagged" title="Jump to next sheet needing review (Alt+N or ])" style="border-color: #fcd34d; color: #92400e; background-color: #fef3c7; font-weight: 600;">⚠️ Next Flagged</button>
             <select id="selectInspectSubmission" class="form-select" style="min-width: 220px;">
               <option value="">Select a scanned sheet...</option>
             </select>
+            <span style="font-size: 0.72rem; color: var(--text-secondary); margin-left: 0.25rem;">⌨️ <strong>A-E</strong> answer • <strong>↑↓</strong> select • <strong>[ ]</strong> flagged</span>
           </div>
         </div>
 
@@ -385,9 +388,10 @@
             <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);">
               <h3 style="font-size: 1rem; font-weight: 700;" id="inspectStudentName">Select a Sheet</h3>
               <p style="font-size: 0.8rem; color: var(--text-secondary);" id="inspectStudentDetails">ID: - • Form: -</p>
-              <div style="margin-top: 0.5rem;">
+              <div style="margin-top: 0.5rem; display: flex; gap: 0.35rem; flex-wrap: wrap;">
                 <span class="badge badge-mint" id="inspectScoreBadge">Score: -</span>
                 <span class="badge badge-slate" id="inspectThresholdBadge">Threshold: -</span>
+                <span class="badge badge-flag-amber" id="inspectFlagBadge" style="display: none;">⚠️ Needs Review</span>
               </div>
             </div>
 
@@ -404,7 +408,10 @@
               <button class="btn btn-sm btn-subtle" id="btnAttachImage">📷 Select Image for This Sheet</button>
             </div>
 
-            <h4 style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">Question Breakdown</h4>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <h4 style="font-size: 0.85rem; font-weight: 600; margin: 0;">Question Breakdown</h4>
+              <span id="inspectFlagSummaryCount" style="font-size: 0.72rem; color: #92400e; font-weight: 600;"></span>
+            </div>
             <div id="inspectorQuestionList">
               <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 2rem;">No sheet selected.</p>
             </div>
@@ -444,7 +451,15 @@
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
-          <input type="text" id="inputSearchRoster" class="form-input" placeholder="Search by Student ID or Name..." style="max-width: 300px;">
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="inputSearchRoster" class="form-input" placeholder="Search by Student ID or Name..." style="max-width: 240px;">
+            <div class="filter-pill-group" id="rosterFilterPills">
+              <button type="button" class="filter-pill-btn active" data-filter="all">All</button>
+              <button type="button" class="filter-pill-btn" data-filter="flagged" id="btnRosterFilterFlagged" style="color: #b45309;">⚠️ Needs Review</button>
+              <button type="button" class="filter-pill-btn" data-filter="graded">Graded</button>
+              <button type="button" class="filter-pill-btn" data-filter="errors">Errors</button>
+            </div>
+          </div>
           <span class="badge badge-slate" id="rosterCountBadge">0 Students</span>
         </div>
 

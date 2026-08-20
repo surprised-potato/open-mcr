@@ -574,6 +574,43 @@ class OpenMCRApp {
     this.renderAll();
   }
 
+  getDuplicateStudentIds() {
+    const activeSubs = this.getActiveSubmissions();
+    const counts = {};
+    activeSubs.forEach(sub => {
+      const id = (sub.studentId || '').trim();
+      if (id && id !== '-' && id.toLowerCase() !== 'unknown') {
+        counts[id] = (counts[id] || 0) + 1;
+      }
+    });
+    return new Set(Object.keys(counts).filter(id => counts[id] > 1));
+  }
+
+  isSubmissionFlagged(sub) {
+    if (!sub) return false;
+    if (sub.error) return true;
+    if (sub.hasFlags) return true;
+    if (sub.flags && (sub.flags.totalFlags > 0 || sub.flags.multipleMarks > 0 || sub.flags.faintMarks > 0)) return true;
+
+    // Check duplicate student ID
+    const duplicates = this.getDuplicateStudentIds();
+    const id = (sub.studentId || '').trim();
+    if (id && duplicates.has(id)) return true;
+
+    // Check question details for multiple marks or faint marks
+    if (sub.questionDetails && Array.isArray(sub.questionDetails)) {
+      if (sub.questionDetails.some(q => q.flags && q.flags.length > 0 && !q.flags.every(f => f === 'blank'))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  getFlaggedSubmissions() {
+    return this.getActiveSubmissions().filter(sub => this.isSubmissionFlagged(sub));
+  }
+
   openInspectorForSubmission(submissionId) {
     this.state.selectedScanId = submissionId;
     this.switchTab('inspector');

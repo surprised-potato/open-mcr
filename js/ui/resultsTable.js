@@ -10,11 +10,32 @@ export function initResultsTable(app) {
   const countBadge = document.getElementById('rosterCountBadge');
   const btnExportExcel = document.getElementById('btnExportExcel');
   const btnExportCsv = document.getElementById('btnExportCsv');
+  const filterPills = document.getElementById('rosterFilterPills');
+  const btnFilterFlagged = document.getElementById('btnRosterFilterFlagged');
+
+  let activeFilter = 'all';
 
   function renderResults() {
     const query = (searchInput.value || '').trim().toLowerCase();
     const activeExam = app.getActiveExam();
-    let submissions = app.getActiveSubmissions();
+    let allSubmissions = app.getActiveSubmissions();
+    const duplicateIds = app.getDuplicateStudentIds ? app.getDuplicateStudentIds() : new Set();
+
+    // Update Flagged count in filter pill button
+    const flaggedCount = allSubmissions.filter(s => app.isSubmissionFlagged(s)).length;
+    if (btnFilterFlagged) {
+      btnFilterFlagged.textContent = flaggedCount > 0 ? `⚠️ Needs Review (${flaggedCount})` : '⚠️ Needs Review';
+    }
+
+    // Apply active filter
+    let submissions = allSubmissions.slice();
+    if (activeFilter === 'flagged') {
+      submissions = submissions.filter(s => app.isSubmissionFlagged(s));
+    } else if (activeFilter === 'graded') {
+      submissions = submissions.filter(s => !s.error);
+    } else if (activeFilter === 'errors') {
+      submissions = submissions.filter(s => Boolean(s.error));
+    }
 
     // Apply sorting
     if (activeExam.sortByName) {
@@ -32,12 +53,15 @@ export function initResultsTable(app) {
       );
     }
 
-    countBadge.textContent = `${submissions.length} Students`;
+    countBadge.textContent = `${submissions.length} / ${allSubmissions.length} Students`;
 
     if (submissions.length === 0) {
+      const msg = activeFilter === 'flagged'
+        ? '🎉 No sheets require review for this exam!'
+        : `No results found for "${activeExam.name}".`;
       tableBody.innerHTML = `
         <tr>
-          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No results found for "${activeExam.name}". Scan sheets in the <strong>Scanner</strong> tab to begin.</td>
+          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">${msg}</td>
         </tr>`;
       return;
     }
@@ -48,7 +72,10 @@ export function initResultsTable(app) {
     submissions.forEach(sub => {
       const tr = document.createElement('tr');
       const isErr = Boolean(sub.error);
+      const isFlagged = app.isSubmissionFlagged(sub);
+      const isDup = sub.studentId && duplicateIds.has(sub.studentId.trim());
       const totalQ = sub.totalQuestions || examNumQ;
+
       const scoreBadge = isErr
         ? `<span class="badge badge-rose" title="${sub.error || 'Scan error'}">Error</span>`
         : sub.score >= 70
@@ -57,13 +84,34 @@ export function initResultsTable(app) {
 
       if (sub.isOverridden) {
         tr.className = 'row-overridden';
+      } else if (isFlagged) {
+        tr.className = 'row-flagged';
+      }
+
+      // Generate Flag Pills
+      let flagBadgesHtml = '';
+      if (isDup) {
+        flagBadgesHtml += `<span class="badge-flag badge-flag-rose" title="Duplicate Student ID detected in this exam">⚠️ Duplicate ID</span> `;
+      }
+      if (sub.flags) {
+        if (sub.flags.multipleMarks > 0) {
+          flagBadgesHtml += `<span class="badge-flag badge-flag-amber" title="${sub.flags.multipleMarks} question(s) marked with multiple choices">⚠️ ${sub.flags.multipleMarks} Multi-mark${sub.flags.multipleMarks > 1 ? 's' : ''}</span> `;
+        }
+        if (sub.flags.faintMarks > 0) {
+          flagBadgesHtml += `<span class="badge-flag badge-flag-sky" title="${sub.flags.faintMarks} question(s) with faint/low-contrast pencil marks">⚠️ ${sub.flags.faintMarks} Faint</span> `;
+        }
       }
 
       tr.innerHTML = `
-        <td><strong><code>${sub.studentId || '-'}</code></strong></td>
         <td>
-          ${sub.studentName || '-'}
-          ${sub.isOverridden ? '<span class="badge badge-amber" style="margin-left: 0.25rem; font-size: 0.7rem;">✏️ Overridden</span>' : ''}
+          <strong><code>${sub.studentId || '-'}</code></strong>
+        </td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+            <span>${sub.studentName || '-'}</span>
+            ${sub.isOverridden ? '<span class="badge badge-amber" style="font-size: 0.68rem;">✏️ Overridden</span>' : ''}
+            ${flagBadgesHtml}
+          </div>
         </td>
         <td><span class="badge badge-slate">${sub.testFormCode || '-'}</span></td>
         <td>${isErr ? '—' : `${sub.points !== undefined ? sub.points : 0} / ${totalQ}`}</td>
@@ -73,7 +121,7 @@ export function initResultsTable(app) {
           <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
             <button class="btn btn-sm btn-subtle btn-override-row" data-id="${sub.id}" title="Edit / Override student data or answers">✏️ Override</button>
             <button class="btn btn-sm btn-primary btn-view-row" data-id="${sub.id}">🖼️ View</button>
-            <button class="btn btn-sm btn-subtle btn-inspect-row" data-id="${sub.id}">📍 Inspect</button>
+            <button class="btn btn-sm btn-subtle btn-inspect-row" data-id="${sub.id}" style="${isFlagged ? 'border-color: #fcd34d; color: #92400e; background-color: #fef3c7;' : ''}">📍 Inspect</button>
           </div>
         </td>
       `;
@@ -95,6 +143,17 @@ export function initResultsTable(app) {
   }
 
   searchInput.addEventListener('input', renderResults);
+
+  if (filterPills) {
+    filterPills.querySelectorAll('.filter-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterPills.querySelectorAll('.filter-pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeFilter = btn.dataset.filter || 'all';
+        renderResults();
+      });
+    });
+  }
 
   btnExportExcel.addEventListener('click', () => {
     const activeExam = app.getActiveExam();

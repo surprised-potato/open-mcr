@@ -9,7 +9,8 @@ import {
   calculateBubbleFillThreshold,
   readFieldGroup,
   decodeFieldValue,
-  decodeQuestionAnswer
+  decodeQuestionAnswer,
+  evaluateQuestionDetails
 } from './gridReader.js';
 
 export function processScanImage(cv, imageMat, options = {}) {
@@ -100,10 +101,45 @@ export function processScanImage(cv, imageMat, options = {}) {
     studentName = [last, first, mid].filter(Boolean).join(' ').trim();
   }
 
-  // 7. Decode answers
-  const answers = questionFills.map(fills =>
-    decodeQuestionAnswer(fills, threshold, multiAsF, emptyAsG)
-  );
+  // 7. Decode answers and calculate per-question confidence & flags
+  const questionDetails = [];
+  const answers = [];
+  let multipleMarksCount = 0;
+  let faintMarksCount = 0;
+  let blankCount = 0;
+  let lowConfidenceCount = 0;
+
+  for (let i = 0; i < questionFills.length; i++) {
+    const qFills = questionFills[i];
+    const details = evaluateQuestionDetails(qFills, threshold, multiAsF, emptyAsG);
+    const qNum = i + 1;
+
+    answers.push(details.answer);
+    questionDetails.push({
+      q: qNum,
+      answer: details.answer,
+      confidence: details.confidence,
+      flags: details.flags,
+      margin: details.margin,
+      top1: details.top1,
+      top2: details.top2
+    });
+
+    if (details.flags.includes('multiple_marks')) multipleMarksCount++;
+    if (details.flags.includes('faint_mark')) faintMarksCount++;
+    if (details.flags.includes('blank')) blankCount++;
+    if (details.flags.includes('low_confidence')) lowConfidenceCount++;
+  }
+
+  const flagsSummary = {
+    multipleMarks: multipleMarksCount,
+    faintMarks: faintMarksCount,
+    blankCount,
+    lowConfidence: lowConfidenceCount,
+    totalFlags: multipleMarksCount + faintMarksCount + lowConfidenceCount
+  };
+
+  const hasFlags = flagsSummary.totalFlags > 0;
 
   // 8. Package bubble annotations for canvas visual inspector
   const annotatedBubbles = [];
@@ -149,6 +185,9 @@ export function processScanImage(cv, imageMat, options = {}) {
     testFormCode: decodedFields[Field.TEST_FORM_CODE] || '',
     courseId: decodedFields[Field.COURSE_ID] || '',
     answers,
+    questionDetails,
+    flags: flagsSummary,
+    hasFlags,
     threshold: Number(threshold.toFixed(4)),
     corners,
     lMark,

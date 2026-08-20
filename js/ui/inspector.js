@@ -33,7 +33,11 @@ export function initInspector(app) {
   // Navigation Arrows & Tracker
   const btnPrev = document.getElementById('btnInspectPrevSheet');
   const btnNext = document.getElementById('btnInspectNextSheet');
+  const btnNextFlagged = document.getElementById('btnInspectNextFlagged');
   const indexTracker = document.getElementById('inspectIndexTracker');
+
+  const inspectFlagBadge = document.getElementById('inspectFlagBadge');
+  const inspectFlagSummaryCount = document.getElementById('inspectFlagSummaryCount');
 
   const canvasWrapper = document.getElementById('canvasWrapper');
   const btnZoomIn = document.getElementById('btnZoomIn');
@@ -51,6 +55,50 @@ export function initInspector(app) {
   let panStartY = 0;
   let panScrollLeft = 0;
   let panScrollTop = 0;
+  let focusedQuestionIdx = 0; // 0-based index for rapid keyboard review
+
+  function focusQuestion(qIdx, scrollIntoView = true) {
+    const sub = getSelectedSubmission();
+    if (!sub || !sub.answers) return;
+    const maxQ = sub.answers.length;
+    focusedQuestionIdx = Math.max(0, Math.min(maxQ - 1, qIdx));
+
+    // Update DOM class
+    const allRows = qListEl.querySelectorAll('.breakdown-row');
+    allRows.forEach((r, idx) => {
+      r.classList.toggle('active-focus', idx === focusedQuestionIdx);
+    });
+
+    const activeRow = document.getElementById(`inspectRow_Q${focusedQuestionIdx + 1}`);
+    if (activeRow && scrollIntoView) {
+      activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    drawCanvas();
+  }
+
+  function navigateFlaggedSheet(delta = 1) {
+    const flaggedList = app.getFlaggedSubmissions ? app.getFlaggedSubmissions() : [];
+    if (flaggedList.length === 0) {
+      alert("🎉 All scanned sheets for this exam are clean and graded without flags!");
+      return;
+    }
+
+    const currentId = app.state.selectedScanId;
+    let currentFlagIdx = flaggedList.findIndex(s => s.id === currentId);
+    let newFlagIdx;
+    if (currentFlagIdx === -1) {
+      newFlagIdx = delta >= 0 ? 0 : flaggedList.length - 1;
+    } else {
+      newFlagIdx = (currentFlagIdx + delta + flaggedList.length) % flaggedList.length;
+    }
+
+    if (flaggedList[newFlagIdx]) {
+      app.state.selectedScanId = flaggedList[newFlagIdx].id;
+      isEditingCorners = false;
+      renderInspector();
+    }
+  }
 
   function updateCanvasDimensions() {
     if (!currentImage) {
@@ -131,11 +179,15 @@ export function initInspector(app) {
   function populateSelector() {
     selectSub.innerHTML = '<option value="">Select a scanned sheet...</option>';
     const list = app.getActiveSubmissions();
+    const duplicateIds = app.getDuplicateStudentIds ? app.getDuplicateStudentIds() : new Set();
+
     list.forEach((sub, idx) => {
       const opt = document.createElement('option');
       opt.value = sub.id;
-      const statusText = sub.error ? `⚠️ Error (${sub.error})` : `${sub.score !== undefined ? sub.score + '%' : 'Graded'}`;
-      opt.textContent = `${idx + 1}. ${sub.filename} — ${sub.studentName || 'Student'} (${statusText})`;
+      const isFlagged = app.isSubmissionFlagged(sub);
+      const flagPrefix = isFlagged ? '⚠️ ' : '';
+      const statusText = sub.error ? `Error (${sub.error})` : `${sub.score !== undefined ? sub.score + '%' : 'Graded'}`;
+      opt.textContent = `${flagPrefix}${idx + 1}. ${sub.filename} — ${sub.studentName || 'Student'} (${statusText})`;
       if (sub.id === app.state.selectedScanId) {
         opt.selected = true;
       }
@@ -204,6 +256,12 @@ export function initInspector(app) {
     if (btnPrev) btnPrev.disabled = (currentIndex <= 0 || list.length === 0);
     if (btnNext) btnNext.disabled = (currentIndex === -1 || currentIndex >= list.length - 1 || list.length === 0);
 
+    const flaggedList = app.getFlaggedSubmissions ? app.getFlaggedSubmissions() : [];
+    if (btnNextFlagged) {
+      btnNextFlagged.style.display = flaggedList.length > 0 ? 'inline-flex' : 'none';
+      btnNextFlagged.textContent = `⚠️ Flagged (${flaggedList.length})`;
+    }
+
     const sub = getSelectedSubmission();
 
     if (!sub) {
@@ -212,6 +270,8 @@ export function initInspector(app) {
       scoreBadgeEl.textContent = 'Score: -';
       scoreBadgeEl.className = 'badge badge-slate';
       thresholdBadgeEl.textContent = 'Threshold: -';
+      if (inspectFlagBadge) inspectFlagBadge.style.display = 'none';
+      if (inspectFlagSummaryCount) inspectFlagSummaryCount.textContent = '';
       qListEl.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 2rem;">No sheet selected.</p>';
       inspectErrorBanner.style.display = 'none';
       attachImageContainer.style.display = 'none';
@@ -244,6 +304,17 @@ export function initInspector(app) {
         app.openOverrideModal(sub.id);
       });
     }
+
+    // Flag status banner
+    const isFlagged = app.isSubmissionFlagged(sub);
+    if (inspectFlagBadge) {
+      if (isFlagged && !sub.error) {
+        inspectFlagBadge.style.display = 'inline-flex';
+        inspectFlagBadge.textContent = '⚠️ Needs Review';
+      } else {
+        inspectFlagBadge.style.display = 'none';
+      }
+    }
     
     // Render Question Sidebar Breakdown
     const scored = app.scoreExtractedData(sub);
@@ -265,25 +336,42 @@ export function initInspector(app) {
     qListEl.innerHTML = '';
     
     if (scored && scored.questionScores && scored.questionScores.length > 0) {
-      // Display only scored questions (e.g. Q1..Q60 if 60 answers on test)
       const visibleScores = scored.questionScores.filter(qItem => qItem.isScored !== false || qItem.q <= totalQ);
-      visibleScores.forEach(qItem => {
+      let flagsOnSheetCount = 0;
+
+      visibleScores.forEach((qItem, idx) => {
         const isScored = qItem.isScored !== false;
         const qIdx = qItem.q - 1;
         const currentAns = (sub.answers && sub.answers[qIdx] ? sub.answers[qIdx] : '').trim().toUpperCase();
         const keyAns = (qItem.correctAnswer || '—').trim().toUpperCase();
         const isCorrect = isScored && (currentAns !== '' && currentAns === keyAns);
 
+        const qDetail = (sub.questionDetails && sub.questionDetails[qIdx]) ? sub.questionDetails[qIdx] : null;
+        const qFlags = qDetail ? qDetail.flags || [] : [];
+        const isQuestionFlagged = qFlags.some(f => f === 'multiple_marks' || f === 'faint_mark' || f === 'low_confidence');
+        if (isQuestionFlagged) flagsOnSheetCount++;
+
+        let flagPill = '';
+        if (qFlags.includes('multiple_marks')) {
+          flagPill = `<span class="badge-flag badge-flag-amber" title="Multiple choices filled">⚠️ Multiple</span>`;
+        } else if (qFlags.includes('faint_mark')) {
+          flagPill = `<span class="badge-flag badge-flag-sky" title="Faint pencil mark (Confidence: ${Math.round((qDetail.confidence || 0.6) * 100)}%)">⚠️ Faint</span>`;
+        } else if (qFlags.includes('blank') && isScored) {
+          flagPill = `<span class="badge-flag badge-flag-rose" title="Blank / unanswered question">Blank</span>`;
+        }
+
         const row = document.createElement('div');
-        row.className = `breakdown-row ${isScored ? (isCorrect ? 'correct' : 'incorrect') : ''}`;
+        row.className = `breakdown-row ${isScored ? (isCorrect ? 'correct' : 'incorrect') : ''} ${isQuestionFlagged ? 'flagged' : ''} ${idx === focusedQuestionIdx ? 'active-focus' : ''}`;
         row.id = `inspectRow_Q${qItem.q}`;
+        row.tabIndex = 0;
 
         row.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 0.35rem; min-width: 90px;">
+          <div style="display: flex; align-items: center; gap: 0.35rem; min-width: 90px; flex-wrap: wrap;">
             <strong style="min-width: 26px; color: var(--text-main);">Q${qItem.q}:</strong>
             <span style="font-size: 0.72rem; color: var(--text-secondary);">Key: <strong>${keyAns}</strong> ${isScored ? (isCorrect ? '✓' : '✗') : ''}</span>
+            ${flagPill}
           </div>
-          <div class="sidebar-answer-picker" title="Click to override marked answer for Q${qItem.q}">
+          <div class="sidebar-answer-picker" title="Click or use keys A-E to override answer for Q${qItem.q}">
             <button type="button" class="sidebar-opt-btn ${currentAns === 'A' ? 'active' : ''}" data-opt="A">A</button>
             <button type="button" class="sidebar-opt-btn ${currentAns === 'B' ? 'active' : ''}" data-opt="B">B</button>
             <button type="button" class="sidebar-opt-btn ${currentAns === 'C' ? 'active' : ''}" data-opt="C">C</button>
@@ -292,6 +380,10 @@ export function initInspector(app) {
             <button type="button" class="sidebar-opt-btn ${currentAns === '' || currentAns === ' ' ? 'active' : ''}" data-opt="" title="Blank / Clear">—</button>
           </div>
         `;
+
+        row.addEventListener('click', () => {
+          focusQuestion(idx, false);
+        });
 
         row.querySelectorAll('.sidebar-opt-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
@@ -302,6 +394,7 @@ export function initInspector(app) {
             while (sub.answers.length <= qIdx) sub.answers.push('');
 
             sub.answers[qIdx] = newOpt;
+            focusQuestion(idx, false);
 
             // 1. Instant local DOM highlight
             row.querySelectorAll('.sidebar-opt-btn').forEach(b => {
@@ -310,7 +403,7 @@ export function initInspector(app) {
 
             // 2. Instant row correctness state
             const isNowCorrect = isScored && (newOpt !== '' && newOpt === keyAns);
-            row.className = `breakdown-row ${isScored ? (isNowCorrect ? 'correct' : 'incorrect') : ''}`;
+            row.className = `breakdown-row ${isScored ? (isNowCorrect ? 'correct' : 'incorrect') : ''} ${idx === focusedQuestionIdx ? 'active-focus' : ''}`;
             const keyLabel = row.querySelector('span');
             if (keyLabel) {
               keyLabel.innerHTML = `Key: <strong>${keyAns}</strong> ${isScored ? (isNowCorrect ? '✓' : '✗') : ''}`;
@@ -335,8 +428,13 @@ export function initInspector(app) {
 
         qListEl.appendChild(row);
       });
+
+      if (inspectFlagSummaryCount) {
+        inspectFlagSummaryCount.textContent = flagsOnSheetCount > 0 ? `⚠️ ${flagsOnSheetCount} Question Flag${flagsOnSheetCount > 1 ? 's' : ''}` : '';
+      }
     } else {
       qListEl.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 1.5rem;">${sub.error ? `Error: ${sub.error}. Adjust corners to re-process.` : 'No answers recorded.'}</p>`;
+      if (inspectFlagSummaryCount) inspectFlagSummaryCount.textContent = '';
     }
 
     // Check if image data is available
@@ -512,6 +610,32 @@ export function initInspector(app) {
           ctx.stroke();
         }
       });
+
+      // Highlight focused question on canvas
+      if (focusedQuestionIdx >= 0) {
+        const targetQ = focusedQuestionIdx + 1;
+        const qBubbles = sub.annotatedBubbles.filter(b => b.type === 'question' && b.qNumber === targetQ);
+        if (qBubbles.length > 0) {
+          const xs = qBubbles.map(b => b.center.x);
+          const ys = qBubbles.map(b => b.center.y);
+          const r = qBubbles[0].radius || 12;
+          const minX = Math.min(...xs) - r * 1.6;
+          const maxX = Math.max(...xs) + r * 1.6;
+          const minY = Math.min(...ys) - r * 1.6;
+          const maxY = Math.max(...ys) + r * 1.6;
+
+          ctx.save();
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = Math.max(3, currentImage.width / 350);
+          ctx.fillStyle = 'rgba(245, 158, 11, 0.12)';
+          ctx.beginPath();
+          const pad = Math.max(4, currentImage.width / 400);
+          ctx.roundRect ? ctx.roundRect(minX, minY, maxX - minX, maxY - minY, pad * 2) : ctx.rect(minX, minY, maxX - minX, maxY - minY);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
     }
   }
 
@@ -993,6 +1117,7 @@ ${JSON.stringify({
 
   if (btnPrev) btnPrev.addEventListener('click', () => navigateSheet(-1));
   if (btnNext) btnNext.addEventListener('click', () => navigateSheet(1));
+  if (btnNextFlagged) btnNextFlagged.addEventListener('click', () => navigateFlaggedSheet(1));
 
   // Keyboard navigation when inspector tab is active
   window.addEventListener('keydown', (e) => {
@@ -1003,12 +1128,66 @@ ${JSON.stringify({
     const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
     if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
 
-    if (e.key === 'ArrowLeft') {
+    // Sheet Navigation
+    if (e.key === 'ArrowLeft' && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       navigateSheet(-1);
-    } else if (e.key === 'ArrowRight') {
+      return;
+    } else if (e.key === 'ArrowRight' && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       navigateSheet(1);
+      return;
+    }
+
+    // Flagged Sheet Jump ([ / ] or Alt+Left / Alt+Right)
+    if (e.key === ']' || (e.altKey && e.key === 'ArrowRight') || (e.altKey && (e.key === 'n' || e.key === 'N'))) {
+      e.preventDefault();
+      navigateFlaggedSheet(1);
+      return;
+    } else if (e.key === '[' || (e.altKey && e.key === 'ArrowLeft') || (e.altKey && (e.key === 'p' || e.key === 'P'))) {
+      e.preventDefault();
+      navigateFlaggedSheet(-1);
+      return;
+    }
+
+    // Question Navigation (Up / Down)
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      focusQuestion(focusedQuestionIdx - 1);
+      return;
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      focusQuestion(focusedQuestionIdx + 1);
+      return;
+    }
+
+    // Rapid Key Overrides (A, B, C, D, E or 1, 2, 3, 4, 5)
+    const key = e.key.toUpperCase();
+    const keyMap = { '1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E', 'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E' };
+    const sub = getSelectedSubmission();
+
+    if (sub && sub.answers && keyMap[key]) {
+      e.preventDefault();
+      const targetChoice = keyMap[key];
+      const targetRow = document.getElementById(`inspectRow_Q${focusedQuestionIdx + 1}`);
+      if (targetRow) {
+        const btn = targetRow.querySelector(`.sidebar-opt-btn[data-opt="${targetChoice}"]`);
+        if (btn) btn.click();
+      }
+      focusQuestion(focusedQuestionIdx + 1);
+      return;
+    }
+
+    // Clear Answer on active question (Space, Delete, Backspace, -)
+    if (sub && sub.answers && (e.key === ' ' || e.key === 'Delete' || e.key === 'Backspace' || e.key === '-')) {
+      e.preventDefault();
+      const targetRow = document.getElementById(`inspectRow_Q${focusedQuestionIdx + 1}`);
+      if (targetRow) {
+        const clearBtn = targetRow.querySelector(`.sidebar-opt-btn[data-opt=""]`);
+        if (clearBtn) clearBtn.click();
+      }
+      focusQuestion(focusedQuestionIdx + 1);
+      return;
     }
   });
 

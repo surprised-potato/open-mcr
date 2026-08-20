@@ -274,7 +274,30 @@ export function decodeFieldValue(fills, threshold, fieldsType, multiAsF = false)
   return chars.join('').trim();
 }
 
-export function decodeQuestionAnswer(fills, threshold, multiAsF = false, emptyAsG = false) {
+export function evaluateQuestionDetails(fills, threshold, multiAsF = false, emptyAsG = false) {
+  if (!fills || fills.length === 0) {
+    return {
+      answer: emptyAsG ? 'G' : '',
+      confidence: 1.0,
+      flags: ['blank'],
+      margin: 0,
+      top1: null,
+      top2: null,
+      fills: []
+    };
+  }
+
+  const indexed = fills.map((val, idx) => ({
+    val: Number(val.toFixed(3)),
+    idx,
+    choice: LETTERS[idx]
+  })).sort((a, b) => b.val - a.val);
+
+  const top1 = indexed[0];
+  const top2 = indexed.length > 1 ? indexed[1] : null;
+  const margin = Number((top1.val - (top2 ? top2.val : 0)).toFixed(3));
+  const rowMean = fills.reduce((a, b) => a + b, 0) / fills.length;
+
   const filledIndexes = [];
   for (let i = 0; i < fills.length; i++) {
     if (fills[i] > threshold) {
@@ -282,29 +305,60 @@ export function decodeQuestionAnswer(fills, threshold, multiAsF = false, emptyAs
     }
   }
 
-  // If no bubble passed the global threshold, check if one choice clearly stands out above the others in this row (local contrast)
+  // Local contrast fallback if no bubble crossed global threshold but one stands out clearly
+  let isLocalContrastFallback = false;
   if (filledIndexes.length === 0 && fills.length >= 2) {
-    const sorted = fills.map((val, idx) => ({ val, idx })).sort((a, b) => b.val - a.val);
-    const top1 = sorted[0];
-    const top2 = sorted[1];
-    const rowMean = fills.reduce((a, b) => a + b, 0) / fills.length;
-
-    // A bubble is clearly filled if it is significantly above the rest of its row
     if (top1.val >= 0.22 && (top1.val >= top2.val + 0.04 || top1.val >= top2.val * 1.22) && top1.val >= rowMean + 0.035) {
       filledIndexes.push(top1.idx);
+      isLocalContrastFallback = true;
     }
   }
 
+  let answer = '';
+  let confidence = 1.0;
+  const flags = [];
+
   if (filledIndexes.length === 0) {
-    return emptyAsG ? 'G' : '';
+    answer = emptyAsG ? 'G' : '';
+    flags.push('blank');
+    confidence = top1.val > 0.18 ? 0.70 : 1.0;
   } else if (filledIndexes.length === 1) {
-    return LETTERS[filledIndexes[0]];
+    answer = LETTERS[filledIndexes[0]];
+
+    // Check for faint mark or ambiguity with secondary bubble
+    if (isLocalContrastFallback || top1.val < threshold * 1.06) {
+      flags.push('faint_mark');
+      confidence = Math.min(0.78, Math.max(0.50, Number((0.50 + margin * 2.0).toFixed(2))));
+    } else if (top2 && top2.val >= threshold * 0.85 && margin < 0.075) {
+      flags.push('low_confidence');
+      confidence = Math.min(0.72, Math.max(0.52, Number((0.50 + margin * 2.5).toFixed(2))));
+    } else {
+      confidence = Math.min(1.0, Number((0.85 + Math.min(0.15, margin * 1.2)).toFixed(2)));
+    }
   } else {
+    // Multiple bubbles marked
+    flags.push('multiple_marks');
     if (multiAsF) {
-      return 'F';
+      answer = 'F';
     } else {
       const letters = filledIndexes.map(idx => LETTERS[idx]);
-      return `[${letters.join('|')}]`;
+      answer = `[${letters.join('|')}]`;
     }
+    confidence = Number(Math.max(0.30, Math.min(0.60, 0.40 + margin * 1.5)).toFixed(2));
   }
+
+  return {
+    answer,
+    confidence,
+    flags,
+    margin,
+    top1: top1 ? { choice: top1.choice, fill: top1.val } : null,
+    top2: top2 ? { choice: top2.choice, fill: top2.val } : null,
+    fills: indexed
+  };
+}
+
+export function decodeQuestionAnswer(fills, threshold, multiAsF = false, emptyAsG = false) {
+  const result = evaluateQuestionDetails(fills, threshold, multiAsF, emptyAsG);
+  return result.answer;
 }
