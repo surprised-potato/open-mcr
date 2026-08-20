@@ -308,76 +308,79 @@ export function findCornerMarks(cv, imageMat) {
   const rotations = [null, cv.ROTATE_90_CLOCKWISE, cv.ROTATE_180, cv.ROTATE_90_COUNTERCLOCKWISE];
   const epsilons = [0.02, 0.03, 0.05];
   const toleranceMultipliers = [1.0, 1.5, 2.0];
+  const adaptivePasses = [1, 2, 3]; // 1: Otsu+Canny, 2: Adaptive Gaussian (shadows), 3: Morphological Black-Hat
 
-  for (const rotation of rotations) {
-    let mat = imageMat;
-    if (rotation !== null) {
-      mat = new cv.Mat();
-      cv.rotate(imageMat, mat, rotation);
-    }
+  for (const pass of adaptivePasses) {
+    for (const rotation of rotations) {
+      let mat = imageMat;
+      if (rotation !== null) {
+        mat = new cv.Mat();
+        cv.rotate(imageMat, mat, rotation);
+      }
 
-    const contours = extractContours(cv, mat);
+      const contours = extractContours(cv, mat, pass);
 
-    for (const eps of epsilons) {
-      const allPolygons = contoursToPolygons(cv, contours, eps);
-      for (const mult of toleranceMultipliers) {
-        try {
-          const result = findCornerMarksFromPolygons(allPolygons, mult);
-          const [tl, tr] = result.corners;
-          const angleDeg = Math.atan2(tr.y - tl.y, tr.x - tl.x) * (180 / Math.PI);
+      for (const eps of epsilons) {
+        const allPolygons = contoursToPolygons(cv, contours, eps);
+        for (const mult of toleranceMultipliers) {
+          try {
+            const result = findCornerMarksFromPolygons(allPolygons, mult);
+            const [tl, tr] = result.corners;
+            const angleDeg = Math.atan2(tr.y - tl.y, tr.x - tl.x) * (180 / Math.PI);
 
-          let additionalRot = null;
-          if (angleDeg >= 45 && angleDeg < 135) {
-            additionalRot = cv.ROTATE_90_COUNTERCLOCKWISE;
-          } else if (angleDeg >= 135 || angleDeg < -135) {
-            additionalRot = cv.ROTATE_180;
-          } else if (angleDeg >= -135 && angleDeg < -45) {
-            additionalRot = cv.ROTATE_90_CLOCKWISE;
-          }
+            let additionalRot = null;
+            if (angleDeg >= 45 && angleDeg < 135) {
+              additionalRot = cv.ROTATE_90_COUNTERCLOCKWISE;
+            } else if (angleDeg >= 135 || angleDeg < -135) {
+              additionalRot = cv.ROTATE_180;
+            } else if (angleDeg >= -135 && angleDeg < -45) {
+              additionalRot = cv.ROTATE_90_CLOCKWISE;
+            }
 
-          if (additionalRot !== null) {
-            let combinedMat = new cv.Mat();
-            cv.rotate(mat, combinedMat, additionalRot);
-            const uprightContours = extractContours(cv, combinedMat);
-            const uprightPolys = contoursToPolygons(cv, uprightContours, eps);
-            const uprightResult = findCornerMarksFromPolygons(uprightPolys, mult);
-            uprightContours.delete();
-            combinedMat.delete();
+            if (additionalRot !== null) {
+              let combinedMat = new cv.Mat();
+              cv.rotate(mat, combinedMat, additionalRot);
+              const uprightContours = extractContours(cv, combinedMat, pass);
+              const uprightPolys = contoursToPolygons(cv, uprightContours, eps);
+              const uprightResult = findCornerMarksFromPolygons(uprightPolys, mult);
+              uprightContours.delete();
+              combinedMat.delete();
+              contours.delete();
+              if (rotation !== null) mat.delete();
+
+              let totalRot = 0;
+              if (rotation === cv.ROTATE_90_CLOCKWISE) totalRot += 90;
+              else if (rotation === cv.ROTATE_180) totalRot += 180;
+              else if (rotation === cv.ROTATE_90_COUNTERCLOCKWISE) totalRot += 270;
+
+              if (additionalRot === cv.ROTATE_90_CLOCKWISE) totalRot += 90;
+              else if (additionalRot === cv.ROTATE_180) totalRot += 180;
+              else if (additionalRot === cv.ROTATE_90_COUNTERCLOCKWISE) totalRot += 270;
+
+              totalRot = (totalRot % 360 + 360) % 360;
+              let finalRotCode = null;
+              if (totalRot === 90) finalRotCode = cv.ROTATE_90_CLOCKWISE;
+              else if (totalRot === 180) finalRotCode = cv.ROTATE_180;
+              else if (totalRot === 270) finalRotCode = cv.ROTATE_90_COUNTERCLOCKWISE;
+
+              return { ...uprightResult, rotation: finalRotCode };
+            }
+
             contours.delete();
-            if (rotation !== null) mat.delete();
-
-            let totalRot = 0;
-            if (rotation === cv.ROTATE_90_CLOCKWISE) totalRot += 90;
-            else if (rotation === cv.ROTATE_180) totalRot += 180;
-            else if (rotation === cv.ROTATE_90_COUNTERCLOCKWISE) totalRot += 270;
-
-            if (additionalRot === cv.ROTATE_90_CLOCKWISE) totalRot += 90;
-            else if (additionalRot === cv.ROTATE_180) totalRot += 180;
-            else if (additionalRot === cv.ROTATE_90_COUNTERCLOCKWISE) totalRot += 270;
-
-            totalRot = (totalRot % 360 + 360) % 360;
-            let finalRotCode = null;
-            if (totalRot === 90) finalRotCode = cv.ROTATE_90_CLOCKWISE;
-            else if (totalRot === 180) finalRotCode = cv.ROTATE_180;
-            else if (totalRot === 270) finalRotCode = cv.ROTATE_90_COUNTERCLOCKWISE;
-
-            return { ...uprightResult, rotation: finalRotCode };
+            if (rotation !== null) {
+              mat.delete();
+            }
+            return { ...result, rotation };
+          } catch {
+            continue;
           }
-
-          contours.delete();
-          if (rotation !== null) {
-            mat.delete();
-          }
-          return { ...result, rotation };
-        } catch {
-          continue;
         }
       }
-    }
 
-    contours.delete();
-    if (rotation !== null) {
-      mat.delete();
+      contours.delete();
+      if (rotation !== null) {
+        mat.delete();
+      }
     }
   }
 
