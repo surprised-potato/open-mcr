@@ -59,27 +59,28 @@ export function exportToExcel(examName, submissions, answerKeys, numQuestions) {
   const wsKeys = XLSX.utils.aoa_to_sheet([keysHeaders, ...keysRows]);
   XLSX.utils.book_append_sheet(wb, wsKeys, 'Answer Keys');
 
-  // 3. Item Analysis Sheet
+  // 3. Item Analysis Sheet (Kelly's 27% Rule & Psychometrics)
   const itemHeaders = [
     'Question',
-    'Correct Answer',
-    '% Correct',
-    'Top 10% Correct',
-    'Bottom 10% Correct',
-    'Discrimination Index',
+    'Key',
+    'Difficulty P-Value (%)',
+    'Upper 27% Correct (%)',
+    'Lower 27% Correct (%)',
+    'Discrimination (D-Index)',
     'Count A',
     'Count B',
     'Count C',
     'Count D',
     'Count E',
-    'Blank/Other'
+    'Blank/Other',
+    'Diagnostic Status'
   ];
   const defaultKey = answerKeys['*'] || Object.values(answerKeys)[0] || [];
   const itemRows = [];
 
   const validSubs = submissions.filter(s => !s.error && s.score !== undefined);
   const sortedSubs = [...validSubs].sort((a, b) => (b.score || 0) - (a.score || 0));
-  const cohortSize = Math.max(1, Math.round(sortedSubs.length * 0.1));
+  const cohortSize = Math.max(1, Math.round(sortedSubs.length * 0.27));
   const topCohort = sortedSubs.slice(0, cohortSize);
   const bottomCohort = sortedSubs.slice(-cohortSize);
 
@@ -138,6 +139,11 @@ export function exportToExcel(examName, submissions, answerKeys, numQuestions) {
       dFormatted = (dVal >= 0 ? '+' : '') + dVal.toFixed(2);
     }
 
+    let status = 'Good';
+    if (dVal < 0) status = 'Check Key / Negative D';
+    else if (dVal >= 0.40) status = 'Excellent';
+    else if (dVal < 0.15) status = 'Low Discrimination';
+
     itemRows.push([
       `Q${i + 1}`,
       correctAns,
@@ -150,7 +156,8 @@ export function exportToExcel(examName, submissions, answerKeys, numQuestions) {
       counts.C,
       counts.D,
       counts.E,
-      counts.other
+      counts.other,
+      status
     ]);
   }
 
@@ -158,6 +165,82 @@ export function exportToExcel(examName, submissions, answerKeys, numQuestions) {
   XLSX.utils.book_append_sheet(wb, wsItems, 'Item Analysis');
 
   const filename = `${(examName || 'OpenMCR_Exam').replace(/[^a-zA-Z0-9_-]/g, '_')}_Results.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+export function exportItemAnalysisToExcel(examName, formCode, questionStats, summaryStats = {}) {
+  if (typeof XLSX === 'undefined') {
+    throw new Error("XLSX library is not loaded.");
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  // Summary Metadata Rows
+  const summaryRows = [
+    ['OpenMCR Classical Item Analysis Report'],
+    ['Exam Name', examName || 'Exam'],
+    ['Form Filter', formCode === 'all' ? 'All Forms Combined' : `Form ${formCode}`],
+    ['Total Graded', summaryStats.totalGraded || 0],
+    ['Class Mean (%)', `${(summaryStats.meanScore || 0).toFixed(1)}%`],
+    ['Standard Deviation (σ)', (summaryStats.stdDev || 0).toFixed(2)],
+    ['KR-20 Reliability', (summaryStats.kr20 || 0).toFixed(2)],
+    ['Generated At', new Date().toLocaleString()],
+    []
+  ];
+
+  // Item Analysis Headers
+  const itemHeaders = [
+    'Question',
+    'Correct Key',
+    'P-Value (%)',
+    'Upper 27% (%)',
+    'Lower 27% (%)',
+    'Discrimination (D)',
+    'r(pbis)',
+    'Choice A',
+    'Choice B',
+    'Choice C',
+    'Choice D',
+    'Choice E',
+    'Blank/Multi',
+    'Distractor Traps',
+    'Mastery Recommendation'
+  ];
+
+  const itemRows = questionStats.map(q => {
+    const traps = (q.distractorTraps || []).map(t => `${t.opt}:${t.pct}%`).join('; ') || 'None';
+    let recommendation = 'Good item';
+    if (q.dIndex < 0) recommendation = '🚨 Negative D — Check Answer Key';
+    else if (q.pPercent < 30) recommendation = '⚠️ Low Class Mastery (<30%)';
+    else if (q.pPercent >= 85) recommendation = '⭐ Mastery Achieved (>85%)';
+    else if (q.dIndex >= 0.40) recommendation = '⭐ Highly Discriminating Item';
+    else if (q.dIndex < 0.15) recommendation = '⚠️ Low Discrimination Index';
+
+    return [
+      `Q${q.qNum}`,
+      q.correctAns || '',
+      q.pPercent,
+      q.pUpper,
+      q.pLower,
+      q.dIndex,
+      q.rPbis,
+      q.counts.A || 0,
+      q.counts.B || 0,
+      q.counts.C || 0,
+      q.counts.D || 0,
+      q.counts.E || 0,
+      q.counts.other || 0,
+      traps,
+      recommendation
+    ];
+  });
+
+  const fullData = [...summaryRows, itemHeaders, ...itemRows];
+  const ws = XLSX.utils.aoa_to_sheet(fullData);
+  XLSX.utils.book_append_sheet(wb, ws, 'Item Analysis');
+
+  const formSuffix = formCode === 'all' ? 'AllForms' : `Form_${formCode}`;
+  const filename = `Item_Analysis_${(examName || 'Exam').replace(/[^a-zA-Z0-9_-]/g, '_')}_${formSuffix}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 

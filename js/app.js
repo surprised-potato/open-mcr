@@ -12,6 +12,7 @@ import { initAnalytics } from './ui/analytics.js';
 import { initFirebaseModal } from './ui/firebaseModal.js';
 import { initSheetViewer } from './ui/sheetViewer.js';
 import { initOverrideModal } from './ui/overrideModal.js';
+import { initBackupUI } from './storage/backupManager.js';
 import {
   saveExamsToDB,
   saveSingleExamToDB,
@@ -266,6 +267,14 @@ class OpenMCRApp {
     this.ui.firebaseModal = initFirebaseModal(this);
     this.ui.sheetViewer = initSheetViewer(this);
     this.ui.overrideModal = initOverrideModal(this);
+    this.ui.backup = initBackupUI(this);
+
+    // Register Service Worker for PWA Offline Execution
+    if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
+      navigator.serviceWorker.register('./sw.js').catch(err => {
+        console.warn("ServiceWorker note:", err);
+      });
+    }
 
     // 5. Restore Exams & Submissions directly from IndexedDB (Single Source of Truth)
     try {

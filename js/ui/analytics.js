@@ -4,6 +4,8 @@
  * Point-Biserial Correlation (r_pbis), KR-20 Reliability, Distractor Functioning, and Heatmap Grid.
  */
 
+import { exportItemAnalysisToExcel } from '../export/excelExport.js';
+
 export function initAnalytics(app) {
   // Stat Card Elements
   const statTotalGraded = document.getElementById('statTotalGraded');
@@ -21,6 +23,7 @@ export function initAnalytics(app) {
   const itemTableBody = document.getElementById('itemAnalysisTableBody');
   const searchInput = document.getElementById('inputSearchItemAnalysis');
   const btnExportCsv = document.getElementById('btnExportItemAnalysisCsv');
+  const btnExportExcel = document.getElementById('btnExportItemAnalysisExcel');
 
   // Form Filter Elements
   const selectAnalyticsForm = document.getElementById('selectAnalyticsForm');
@@ -58,6 +61,7 @@ export function initAnalytics(app) {
 
   let activeFilter = 'all';
   let cachedQuestionStats = [];
+  let cachedSummaryStats = { totalGraded: 0, meanScore: 0, stdDev: 0, kr20: 0 };
   let topNCount = parseInt(localStorage.getItem('openmcr_analytics_top_n') || '5', 10);
   if (isNaN(topNCount) || topNCount < 1) topNCount = 5;
   if (inputTopNCount) inputTopNCount.value = topNCount;
@@ -144,6 +148,22 @@ export function initAnalytics(app) {
 
   if (btnExportCsv) {
     btnExportCsv.addEventListener('click', exportItemAnalysisToCsv);
+  }
+
+  if (btnExportExcel) {
+    btnExportExcel.addEventListener('click', () => {
+      if (!cachedQuestionStats || cachedQuestionStats.length === 0) {
+        alert("No item analysis data to export. Please scan exam sheets first.");
+        return;
+      }
+      const activeExam = app.getActiveExam();
+      exportItemAnalysisToExcel(
+        activeExam.name,
+        selectedFormCode,
+        cachedQuestionStats,
+        cachedSummaryStats
+      );
+    });
   }
 
   function renderFormControls(activeExam, allSubs) {
@@ -406,6 +426,13 @@ export function initAnalytics(app) {
     }
     if (statKR20) statKR20.textContent = kr20.toFixed(2);
 
+    cachedSummaryStats = {
+      totalGraded: validSubs.length,
+      meanScore,
+      stdDev,
+      kr20
+    };
+
     // 4. Render Top N & Bottom N Student Leaderboards
     renderLeaderboards(validSubs, numQ);
 
@@ -535,7 +562,6 @@ export function initAnalytics(app) {
     let brackets = [];
 
     if (histMode === 'points') {
-      // Dynamic point-based bins capped precisely at numQ (e.g. 60 items -> bins up to 60 only)
       let step = 10;
       if (numQ <= 15) step = 3;
       else if (numQ <= 30) step = 5;
@@ -561,7 +587,6 @@ export function initAnalytics(app) {
         if (b) b.count++;
       });
     } else {
-      // Percentage distribution (0-100%)
       brackets = [
         { label: '0-9%', min: 0, max: 9.99, count: 0 },
         { label: '10-19%', min: 10, max: 19.99, count: 0 },
@@ -873,6 +898,8 @@ export function initAnalytics(app) {
     const csvContent = rows.map(r => r.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
     const formSuffix = selectedFormCode === 'all' ? 'AllForms' : `Form_${selectedFormCode}`;
     link.setAttribute('download', `Item_Analysis_${(activeExam.name || 'Exam').replace(/\s+/g, '_')}_${formSuffix}_${Date.now()}.csv`);
     document.body.appendChild(link);

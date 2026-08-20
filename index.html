@@ -166,6 +166,44 @@
           </table>
         </div>
       </div>
+
+      <!-- Backup, Restore & Storage Management Card -->
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3 class="card-title" style="font-size: 1.05rem;">💾 Backup, Restore & Storage Management</h3>
+            <p class="card-subtitle">Export full workspace archives (.openmcr), migrate between devices, and manage local storage</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <span class="badge badge-mint" id="offlineStatusBadge">🟢 Online / Offline-Ready</span>
+          </div>
+        </div>
+
+        <!-- Storage Quota Gauge -->
+        <div style="background: var(--bg-card-subtle, #f8fafc); border: 1px solid var(--border-color); border-radius: var(--radius-sm, 6px); padding: 1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">IndexedDB Browser Storage Quota</span>
+            <span style="font-size: 0.8rem; color: var(--text-secondary);" id="storageUsageText">Estimating storage...</span>
+          </div>
+          <div class="progress-track" style="height: 8px; margin: 0;">
+            <div class="progress-fill" id="storageProgressFill" style="width: 1%; background-color: var(--primary);"></div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-primary btn-sm" id="btnExportFullBackup">📤 Export Full Workspace Backup (.openmcr)</button>
+            <button class="btn btn-sm" id="btnExportActiveExamBackup">📦 Export Active Exam Only</button>
+            <button class="btn btn-sm btn-subtle" id="btnImportBackupFile">📥 Restore / Import Backup File</button>
+            <input type="file" id="fileImportBackupInput" accept=".openmcr,.json" style="display: none;">
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-subtle" id="btnOptimizeStorage" title="Prune temporary runtime fields and refresh IndexedDB caches">🧹 Optimize Storage</button>
+            <button class="btn btn-sm btn-subtle" id="btnFactoryResetDB" style="color: var(--pastel-rose-text);" title="Factory reset and clear all local data">🗑️ Reset All Data</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- 2. ANSWER KEYS PANE -->
@@ -675,7 +713,8 @@
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <input type="text" id="inputSearchItemAnalysis" class="form-input" placeholder="Search question (e.g. 'Q12')..." style="max-width: 200px; padding: 0.3rem 0.6rem; font-size: 0.8rem;">
-            <button class="btn btn-sm btn-primary" id="btnExportItemAnalysisCsv">📄 Export Item Analysis CSV</button>
+            <button class="btn btn-sm btn-primary" id="btnExportItemAnalysisExcel">📊 Export Item Analysis (.xlsx)</button>
+            <button class="btn btn-sm btn-subtle" id="btnExportItemAnalysisCsv">📄 Export CSV</button>
           </div>
         </div>
 
