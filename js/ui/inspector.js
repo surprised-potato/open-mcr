@@ -196,12 +196,47 @@ export function initInspector(app) {
       const visibleScores = scored.questionScores.filter(qItem => qItem.isScored !== false || qItem.q <= totalQ);
       visibleScores.forEach(qItem => {
         const isScored = qItem.isScored !== false;
+        const qIdx = qItem.q - 1;
+        const currentAns = (sub.answers && sub.answers[qIdx] ? sub.answers[qIdx] : '').trim().toUpperCase();
+        const keyAns = (qItem.correctAnswer || '—').trim().toUpperCase();
+        const isCorrect = isScored && (currentAns !== '' && currentAns === keyAns);
+
         const row = document.createElement('div');
-        row.className = `breakdown-row ${isScored ? (qItem.isCorrect ? 'correct' : 'incorrect') : ''}`;
+        row.className = `breakdown-row ${isScored ? (isCorrect ? 'correct' : 'incorrect') : ''}`;
+        row.id = `inspectRow_Q${qItem.q}`;
+
         row.innerHTML = `
-          <span><strong>Q${qItem.q}:</strong> Marked <code>${qItem.studentAnswer || '—'}</code></span>
-          <span>Key: <strong>${qItem.correctAnswer || '—'}</strong> ${isScored ? (qItem.isCorrect ? '✓' : '✗') : '(Not Scored)'}</span>
+          <div style="display: flex; align-items: center; gap: 0.35rem; min-width: 90px;">
+            <strong style="min-width: 26px; color: var(--text-main);">Q${qItem.q}:</strong>
+            <span style="font-size: 0.72rem; color: var(--text-secondary);">Key: <strong>${keyAns}</strong> ${isScored ? (isCorrect ? '✓' : '✗') : ''}</span>
+          </div>
+          <div class="sidebar-answer-picker" title="Click to override marked answer for Q${qItem.q}">
+            <button type="button" class="sidebar-opt-btn ${currentAns === 'A' ? 'active' : ''}" data-opt="A">A</button>
+            <button type="button" class="sidebar-opt-btn ${currentAns === 'B' ? 'active' : ''}" data-opt="B">B</button>
+            <button type="button" class="sidebar-opt-btn ${currentAns === 'C' ? 'active' : ''}" data-opt="C">C</button>
+            <button type="button" class="sidebar-opt-btn ${currentAns === 'D' ? 'active' : ''}" data-opt="D">D</button>
+            <button type="button" class="sidebar-opt-btn ${currentAns === 'E' ? 'active' : ''}" data-opt="E">E</button>
+            <button type="button" class="sidebar-opt-btn ${currentAns === '' || currentAns === ' ' ? 'active' : ''}" data-opt="" title="Blank / Clear">—</button>
+          </div>
         `;
+
+        row.querySelectorAll('.sidebar-opt-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const newOpt = btn.dataset.opt;
+
+            if (!sub.answers) sub.answers = [];
+            while (sub.answers.length <= qIdx) sub.answers.push('');
+
+            const updatedAnswers = [...sub.answers];
+            updatedAnswers[qIdx] = newOpt;
+
+            app.applySubmissionOverride(sub.id, {
+              answers: updatedAnswers
+            });
+          });
+        });
+
         qListEl.appendChild(row);
       });
     } else {

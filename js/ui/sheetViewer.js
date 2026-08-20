@@ -297,17 +297,46 @@ export function initSheetViewer(app) {
       if (!keyAns && qNum > totalQ) return; // Skip unkeyed questions beyond test length
 
       const isScored = Boolean(keyAns);
-      const isCorrect = isScored && (studentAns === keyAns && Boolean(studentAns));
-      const isBlank = !studentAns || studentAns === '';
+      const curAns = (studentAns || '').trim().toUpperCase();
+      const isCorrect = isScored && (curAns !== '' && curAns === keyAns.trim().toUpperCase());
 
       const row = document.createElement('div');
       row.className = `breakdown-row ${isScored ? (isCorrect ? 'correct' : 'incorrect') : ''}`;
       row.innerHTML = `
-        <span style="font-weight: 600;">Q${qNum}</span>
-        <span>Student: <strong>${isBlank ? '—' : studentAns}</strong></span>
-        <span>Key: <strong>${keyAns || '—'}</strong></span>
-        <span>${isScored ? (isCorrect ? '✅ +1' : '❌ 0') : '(Not Scored)'}</span>
+        <div style="display: flex; align-items: center; gap: 0.35rem; min-width: 85px;">
+          <strong style="min-width: 26px;">Q${qNum}:</strong>
+          <span style="font-size: 0.72rem; color: var(--text-secondary);">Key: <strong>${keyAns || '—'}</strong> ${isScored ? (isCorrect ? '✓' : '✗') : ''}</span>
+        </div>
+        <div class="sidebar-answer-picker" title="Click to override marked answer for Q${qNum}">
+          <button type="button" class="sidebar-opt-btn ${curAns === 'A' ? 'active' : ''}" data-opt="A">A</button>
+          <button type="button" class="sidebar-opt-btn ${curAns === 'B' ? 'active' : ''}" data-opt="B">B</button>
+          <button type="button" class="sidebar-opt-btn ${curAns === 'C' ? 'active' : ''}" data-opt="C">C</button>
+          <button type="button" class="sidebar-opt-btn ${curAns === 'D' ? 'active' : ''}" data-opt="D">D</button>
+          <button type="button" class="sidebar-opt-btn ${curAns === 'E' ? 'active' : ''}" data-opt="E">E</button>
+          <button type="button" class="sidebar-opt-btn ${curAns === '' || curAns === ' ' ? 'active' : ''}" data-opt="" title="Blank / Clear">—</button>
+        </div>
       `;
+
+      row.querySelectorAll('.sidebar-opt-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const newOpt = btn.dataset.opt;
+
+          if (!sub.answers) sub.answers = [];
+          while (sub.answers.length <= qIdx) sub.answers.push('');
+
+          const updatedAnswers = [...sub.answers];
+          updatedAnswers[qIdx] = newOpt;
+
+          app.applySubmissionOverride(sub.id, {
+            answers: updatedAnswers
+          });
+
+          // Refresh current viewer display
+          loadViewerSubmission();
+        });
+      });
+
       viewerQuestionList.appendChild(row);
     });
   }
