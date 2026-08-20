@@ -14,9 +14,11 @@ import { initSheetViewer } from './ui/sheetViewer.js';
 import { initOverrideModal } from './ui/overrideModal.js';
 import {
   saveExamsToDB,
+  saveSingleExamToDB,
   loadExamsFromDB,
   saveSubmissionsToDB,
   loadSubmissionsFromDB,
+  saveSingleSubmissionToDB,
   deleteSubmissionFromDB,
   clearSubmissionsFromDB
 } from './storage/localStore.js';
