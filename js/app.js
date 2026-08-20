@@ -41,8 +41,8 @@ class OpenMCRApp {
       emptyAsG: false,
       sortByName: true,
       answerKeys: {
-        '*': Array(75).fill('A'),
-        'A': Array(75).fill('A')
+        '*': Array(75).fill(''),
+        'A': Array(75).fill('')
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -63,7 +63,7 @@ class OpenMCRApp {
               multiAsF: Boolean(parsed.examConfig.multiAsF),
               emptyAsG: Boolean(parsed.examConfig.emptyAsG),
               sortByName: parsed.examConfig.sortByName !== undefined ? parsed.examConfig.sortByName : true,
-              answerKeys: parsed.answerKeys || { '*': Array(75).fill('A'), 'A': Array(75).fill('A') },
+              answerKeys: parsed.answerKeys || { '*': Array(75).fill(''), 'A': Array(75).fill('') },
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             }];
@@ -236,7 +236,11 @@ class OpenMCRApp {
       // Adjust answer keys size
       for (const form of Object.keys(active.answerKeys)) {
         if (active.answerKeys[form].length !== numQ) {
-          active.answerKeys[form] = Array(numQ).fill('A');
+          if (active.answerKeys[form].length < numQ) {
+            active.answerKeys[form].push(...Array(numQ - active.answerKeys[form].length).fill(''));
+          } else {
+            active.answerKeys[form] = active.answerKeys[form].slice(0, numQ);
+          }
         }
       }
       this.saveState();
@@ -248,23 +252,24 @@ class OpenMCRApp {
     inputCourseId.addEventListener('input', () => {
       this.getActiveExam().courseId = inputCourseId.value;
       this.saveState();
-      this.renderAllExamsTable();
     });
 
     chkMultiAsF.addEventListener('change', () => {
       this.getActiveExam().multiAsF = chkMultiAsF.checked;
       this.saveState();
+      this.recalculateAllScores();
     });
 
     chkEmptyAsG.addEventListener('change', () => {
       this.getActiveExam().emptyAsG = chkEmptyAsG.checked;
       this.saveState();
+      this.recalculateAllScores();
     });
 
     chkSortByName.addEventListener('change', () => {
       this.getActiveExam().sortByName = chkSortByName.checked;
       this.saveState();
-      this.renderResults();
+      this.renderAll();
     });
 
     const btnProceedToKeys = document.getElementById('btnProceedToKeys');
@@ -381,8 +386,8 @@ class OpenMCRApp {
       emptyAsG: false,
       sortByName: true,
       answerKeys: {
-        '*': Array(numQ).fill('A'),
-        'A': Array(numQ).fill('A')
+        '*': Array(numQ).fill(''),
+        'A': Array(numQ).fill('')
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

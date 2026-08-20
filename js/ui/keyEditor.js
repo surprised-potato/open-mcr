@@ -154,7 +154,7 @@ export function initKeyEditor(app) {
   if (btnE) btnE.addEventListener('click', () => quickFill('E'));
   if (btnClear) btnClear.addEventListener('click', () => quickFill(''));
 
-  // CSV Export & Import
+  // CSV & JSON Export & Import
   const fileImport = document.getElementById('fileImportKeysCsv');
   const btnImportCsv = document.getElementById('btnImportKeysCsv');
   const btnExportCsv = document.getElementById('btnExportKeysCsv');
@@ -164,30 +164,109 @@ export function initKeyEditor(app) {
     fileImport.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-      if (lines.length === 0) return;
 
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-      const q1Idx = headers.findIndex(h => h.toUpperCase() === 'Q1');
-      if (q1Idx === -1) {
-        alert("Invalid answer key CSV: missing 'Q1' header column.");
-        return;
+      try {
+        const text = await file.text();
+        const activeExam = app.getActiveExam();
+        const numQ = getNumQuestions();
+        const fileName = (file.name || '').toLowerCase();
+
+        let importedSummary = [];
+
+        if (fileName.endsWith('.json')) {
+          // JSON Import
+          const parsed = JSON.parse(text);
+          const keysObj = parsed.keys || parsed.answerKeys || parsed;
+          if (typeof keysObj === 'object' && keysObj !== null) {
+            Object.entries(keysObj).forEach(([formCode, ansList]) => {
+              if (Array.isArray(ansList)) {
+                const normForm = formCode.trim().toUpperCase();
+                const newArr = Array(numQ).fill('');
+                for (let i = 0; i < numQ; i++) {
+                  const val = (ansList[i] || '').trim().toUpperCase();
+                  if (['A', 'B', 'C', 'D', 'E'].includes(val)) {
+                    newArr[i] = val;
+                  }
+                }
+                activeExam.answerKeys[normForm] = newArr;
+                const filledCount = newArr.filter(Boolean).length;
+                importedSummary.push(`Form ${normForm}: ${filledCount} / ${numQ} keyed`);
+              }
+            });
+          }
+        } else {
+          // CSV / Text Import
+          const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+          if (lines.length === 0) throw new Error("The uploaded file is empty.");
+
+          const firstRow = lines[0].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+          const q1Idx = firstRow.findIndex(h => /^Q?1$/i.test(h));
+
+          // Format A: Standard Matrix CSV (Form Code, Q1, Q2, Q3...)
+          if (q1Idx >= 0 && lines.length > 1) {
+            for (let r = 1; r < lines.length; r++) {
+              const row = lines[r].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+              if (row.length === 0 || !row[0]) continue;
+              const formCode = (row[0] || '*').trim().toUpperCase();
+              const answersRaw = row.slice(q1Idx);
+
+              const newKeyArr = Array(numQ).fill('');
+              for (let i = 0; i < numQ; i++) {
+                const ans = (answersRaw[i] || '').trim().toUpperCase();
+                if (['A', 'B', 'C', 'D', 'E'].includes(ans)) {
+                  newKeyArr[i] = ans;
+                } else {
+                  newKeyArr[i] = '';
+                }
+              }
+              activeExam.answerKeys[formCode] = newKeyArr;
+              const filledCount = newKeyArr.filter(Boolean).length;
+              importedSummary.push(`Form ${formCode}: ${filledCount} / ${numQ} keyed`);
+            }
+          }
+          // Format B: Vertical 2-Column List or Sequential Lines (Q1, A / 1, A / A, B, C...)
+          else {
+            const activeForm = (selectKeyForm.value || '*').trim().toUpperCase();
+            const newKeyArr = Array(numQ).fill('');
+
+            lines.forEach(line => {
+              const parts = line.split(/[,\t:=]/).map(p => p.trim().replace(/^"|"$/g, ''));
+              if (parts.length >= 2) {
+                const qMatch = parts[0].match(/\d+/);
+                if (qMatch) {
+                  const qNum = parseInt(qMatch[0], 10);
+                  const ans = parts[1].toUpperCase();
+                  if (qNum >= 1 && qNum <= numQ && ['A', 'B', 'C', 'D', 'E'].includes(ans)) {
+                    newKeyArr[qNum - 1] = ans;
+                  }
+                }
+              } else if (parts.length === 1 && ['A', 'B', 'C', 'D', 'E'].includes(parts[0].toUpperCase())) {
+                const nextEmptyIdx = newKeyArr.findIndex(k => k === '');
+                if (nextEmptyIdx >= 0 && nextEmptyIdx < numQ) {
+                  newKeyArr[nextEmptyIdx] = parts[0].toUpperCase();
+                }
+              }
+            });
+
+            activeExam.answerKeys[activeForm] = newKeyArr;
+            const filledCount = newKeyArr.filter(Boolean).length;
+            importedSummary.push(`Form ${activeForm}: ${filledCount} / ${numQ} keyed`);
+          }
+        }
+
+        if (importedSummary.length === 0) {
+          throw new Error("No valid answer keys could be extracted from the file.");
+        }
+
+        app.saveState();
+        renderKeyMatrix();
+        app.recalculateAllScores();
+        alert(`Answer Keys Uploaded Successfully!\n\n${importedSummary.join('\n')}\n\nAll existing answers were overridden and unkeyed items were left blank.`);
+      } catch (err) {
+        alert(`Failed to import answer key: ${err.message}`);
+      } finally {
+        fileImport.value = '';
       }
-
-      const activeExam = app.getActiveExam();
-      for (let r = 1; r < lines.length; r++) {
-        const row = lines[r].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        const formCode = (row[0] || '*').toUpperCase();
-        const answers = row.slice(q1Idx);
-        activeExam.answerKeys[formCode] = answers;
-      }
-
-      app.saveState();
-      renderKeyMatrix();
-      app.recalculateAllScores();
-      alert("Answer keys imported successfully!");
-      fileImport.value = '';
     });
   }
 
