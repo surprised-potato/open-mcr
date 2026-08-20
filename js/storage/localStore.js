@@ -109,6 +109,27 @@ export async function saveSingleExamToDB(exam) {
   }
 }
 
+export async function deleteExamFromDB(id) {
+  try {
+    const db = await openDatabase();
+    if (!db) return;
+
+    return new Promise((resolve) => {
+      const tx = db.transaction([STORE_EXAMS], 'readwrite');
+      const store = tx.objectStore(STORE_EXAMS);
+      store.delete(id);
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => {
+        console.warn("IndexedDB delete exam error:", e.target.error);
+        resolve();
+      };
+    });
+  } catch (err) {
+    console.warn("Error deleting exam from IndexedDB:", err);
+  }
+}
+
 export async function loadExamsFromDB() {
   try {
     const db = await openDatabase();

@@ -15,6 +15,7 @@ import { initOverrideModal } from './ui/overrideModal.js';
 import {
   saveExamsToDB,
   saveSingleExamToDB,
+  deleteExamFromDB,
   loadExamsFromDB,
   saveSubmissionsToDB,
   loadSubmissionsFromDB,
@@ -22,8 +23,6 @@ import {
   deleteSubmissionFromDB,
   clearSubmissionsFromDB
 } from './storage/localStore.js';
-
-const STORAGE_STATE_KEY = 'openmcr_app_state';
 
 function hasRealKeyAnswers(keyArr) {
   return Array.isArray(keyArr) && keyArr.some(a => (a || '').trim() !== '');
@@ -80,65 +79,6 @@ class OpenMCRApp {
       updatedAt: new Date().toISOString()
     };
 
-    try {
-      const saved = localStorage.getItem(STORAGE_STATE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        let exams = parsed.exams;
-        if (!exams || exams.length === 0) {
-          if (parsed.examConfig) {
-            exams = [{
-              id: parsed.examConfig.id || `exam_${Date.now()}`,
-              name: parsed.examConfig.name || 'Physics 101 Midterm',
-              variant: parsed.examConfig.variant || '75',
-              courseId: parsed.examConfig.courseId || 'PHY2048',
-              multiAsF: Boolean(parsed.examConfig.multiAsF),
-              emptyAsG: Boolean(parsed.examConfig.emptyAsG),
-              sortByName: parsed.examConfig.sortByName !== undefined ? parsed.examConfig.sortByName : true,
-              answerKeys: parsed.answerKeys || { '*': Array(75).fill(''), 'A': Array(75).fill('') },
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            }];
-          } else {
-            exams = [defaultExam];
-          }
-        }
-
-        // Cleanse and restore answer keys for each exam
-        exams.forEach(exam => {
-          const numQ = exam.variant === '150' ? 150 : 75;
-          let backupKeys = null;
-          try {
-            const raw = localStorage.getItem(`openmcr_keys_${exam.id}`);
-            if (raw) backupKeys = JSON.parse(raw);
-          } catch (_) {}
-          exam.answerKeys = sanitizeAndMergeAnswerKeys(exam.answerKeys, backupKeys, numQ);
-        });
-
-        const activeExamId = parsed.activeExamId && exams.some(e => e.id === parsed.activeExamId)
-          ? parsed.activeExamId
-          : exams[0].id;
-
-        const submissions = (parsed.submissions || []).map(s => ({
-          ...s,
-          examId: s.examId || activeExamId
-        }));
-
-        const stateObj = {
-          activeExamId,
-          exams,
-          submissions,
-          selectedScanId: parsed.selectedScanId || null,
-          activeTab: 'setup'
-        };
-
-        this.bindStateProxies(stateObj);
-        return stateObj;
-      }
-    } catch (e) {
-      console.warn("Could not load saved state:", e);
-    }
-
     const stateObj = {
       activeExamId: defaultExam.id,
       exams: [defaultExam],
@@ -185,30 +125,17 @@ class OpenMCRApp {
     return ((this.state && this.state.submissions) || []).filter(s => !s.examId || s.examId === active.id || !validExamIds.has(s.examId));
   }
 
-  saveState() {
+  async saveState() {
     try {
       const active = this.getActiveExam();
       if (active) {
         active.updatedAt = new Date().toISOString();
-        if (active.answerKeys) {
-          localStorage.setItem(`openmcr_keys_${active.id}`, JSON.stringify(active.answerKeys));
-        }
+        localStorage.setItem('openmcr_active_exam_id', active.id);
       }
-      const copy = {
-        activeExamId: this.state.activeExamId,
-        exams: this.state.exams,
-        submissions: this.state.submissions.map(s => {
-          const { imageDataUrl, ...rest } = s;
-          return rest;
-        }),
-        selectedScanId: this.state.selectedScanId
-      };
-      localStorage.setItem(STORAGE_STATE_KEY, JSON.stringify(copy));
-
-      saveExamsToDB(this.state.exams);
-      saveSubmissionsToDB(this.state.submissions);
+      await saveExamsToDB(this.state.exams);
+      await saveSubmissionsToDB(this.state.submissions);
     } catch (e) {
-      console.warn("Could not persist state:", e);
+      console.warn("Could not persist state to IndexedDB:", e);
     }
   }
 
@@ -258,7 +185,7 @@ class OpenMCRApp {
     if (btnDeleteExam) {
       btnDeleteExam.addEventListener('click', () => {
         const active = this.getActiveExam();
-        if (active) this.deleteExam(active.id);
+        if (active) this.deleteActiveExam(active.id);
       });
     }
 
@@ -278,7 +205,6 @@ class OpenMCRApp {
       const active = this.getActiveExam();
       active.variant = selectVariant.value;
       const numQ = active.variant === '150' ? 150 : 75;
-      // Adjust answer keys size
       for (const form of Object.keys(active.answerKeys)) {
         if (active.answerKeys[form].length !== numQ) {
           if (active.answerKeys[form].length < numQ) {
@@ -331,11 +257,6 @@ class OpenMCRApp {
       });
     }
 
-    // Immediate initial sync and render from localStorage
-    this.syncActiveExamToInputs();
-    this.renderExamBar();
-    this.renderAllExamsTable();
-
     // 4. Initialize Child Components
     this.ui.keyEditor = initKeyEditor(this);
     this.ui.scanner = initScanner(this);
@@ -346,71 +267,50 @@ class OpenMCRApp {
     this.ui.sheetViewer = initSheetViewer(this);
     this.ui.overrideModal = initOverrideModal(this);
 
-    // 5. Restore Exams & Submissions from IndexedDB
+    // 5. Restore Exams & Submissions directly from IndexedDB (Single Source of Truth)
     try {
-      const storedExams = await loadExamsFromDB();
-      if (storedExams && storedExams.length > 0) {
-        const examMap = new Map();
-        for (const dbExam of storedExams) {
-          const numQ = dbExam.variant === '150' ? 150 : 75;
-          let backupKeys = null;
-          try {
-            const raw = localStorage.getItem(`openmcr_keys_${dbExam.id}`);
-            if (raw) backupKeys = JSON.parse(raw);
-          } catch (_) {}
-          dbExam.answerKeys = sanitizeAndMergeAnswerKeys(dbExam.answerKeys, backupKeys, numQ);
-          examMap.set(dbExam.id, dbExam);
-        }
-
-        if (this.state.exams) {
-          for (const stateExam of this.state.exams) {
-            const numQ = stateExam.variant === '150' ? 150 : 75;
-            let backupKeys = null;
-            try {
-              const raw = localStorage.getItem(`openmcr_keys_${stateExam.id}`);
-              if (raw) backupKeys = JSON.parse(raw);
-            } catch (_) {}
-            stateExam.answerKeys = sanitizeAndMergeAnswerKeys(stateExam.answerKeys, backupKeys, numQ);
-
-            if (!examMap.has(stateExam.id)) {
-              examMap.set(stateExam.id, stateExam);
-            } else {
-              const dbExam = examMap.get(stateExam.id);
-              const mergedKeys = sanitizeAndMergeAnswerKeys(stateExam.answerKeys, dbExam.answerKeys, numQ);
-              const stateTime = new Date(stateExam.updatedAt || 0).getTime();
-              const dbTime = new Date(dbExam.updatedAt || 0).getTime();
-              const winner = stateTime >= dbTime ? { ...dbExam, ...stateExam } : { ...stateExam, ...dbExam };
-              winner.answerKeys = mergedKeys;
-              examMap.set(stateExam.id, winner);
-            }
-          }
-        }
-        this.state.exams = Array.from(examMap.values());
-        if (!this.state.exams.some(e => e.id === this.state.activeExamId)) {
-          this.state.activeExamId = this.state.exams[0].id;
-        }
+      let storedExams = await loadExamsFromDB();
+      
+      if (!storedExams || storedExams.length === 0) {
+        // Initial clean state with empty answer keys
+        const initialExam = {
+          id: `exam_${Date.now()}`,
+          name: 'Physics 101 Midterm',
+          variant: '75',
+          courseId: 'PHY2048',
+          multiAsF: false,
+          emptyAsG: false,
+          sortByName: true,
+          answerKeys: {
+            '*': Array(75).fill(''),
+            'A': Array(75).fill('')
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        await saveSingleExamToDB(initialExam);
+        storedExams = [initialExam];
       }
+
+      // Sanitize keys (remove legacy template 75-A dummies, leave empty strings)
+      storedExams.forEach(exam => {
+        const numQ = exam.variant === '150' ? 150 : 75;
+        exam.answerKeys = sanitizeAndMergeAnswerKeys(exam.answerKeys, {}, numQ);
+      });
+
+      this.state.exams = storedExams;
+      const lastActiveId = localStorage.getItem('openmcr_active_exam_id');
+      this.state.activeExamId = (lastActiveId && storedExams.some(e => e.id === lastActiveId))
+        ? lastActiveId
+        : storedExams[0].id;
 
       const storedSubs = await loadSubmissionsFromDB();
-      if (storedSubs && storedSubs.length > 0) {
-        const subMap = new Map();
-        for (const s of storedSubs) subMap.set(s.id, s);
-        for (const s of this.state.submissions) {
-          if (!subMap.has(s.id)) {
-            subMap.set(s.id, s);
-          } else {
-            const dbSub = subMap.get(s.id);
-            subMap.set(s.id, {
-              ...dbSub,
-              ...s,
-              imageDataUrl: s.imageDataUrl || dbSub.imageDataUrl || null
-            });
-          }
-        }
-        this.state.submissions = Array.from(subMap.values());
+      this.state.submissions = storedSubs || [];
+      if (this.state.submissions.length > 0) {
+        this.state.selectedScanId = this.state.submissions[0].id;
       }
     } catch (e) {
-      console.warn("Could not restore data from IndexedDB:", e);
+      console.warn("Could not load data from IndexedDB:", e);
     }
 
     this.syncActiveExamToInputs();
