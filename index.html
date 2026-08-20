@@ -124,6 +124,22 @@
         </div>
       </div>
 
+      <!-- Attribution & Source Info Card in Setup -->
+      <div class="card" style="margin-top: 1.5rem; background: var(--bg-card); border-left: 4px solid var(--primary);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.25rem;">ℹ️ About OpenMCR & Project Attribution</h3>
+            <p style="font-size: 0.825rem; color: var(--text-secondary); line-height: 1.5;">
+              <strong>OpenMCR Web</strong> is a free, open-source multiple-choice optical mark recognition exam reader.
+              Originally developed as an independent study project by <strong>Ian Sanders</strong> at the University of South Florida under the direction of <strong>Dr. Autar Kaw</strong>.
+            </p>
+          </div>
+          <a href="https://github.com/iansan5653/open-mcr" target="_blank" rel="noopener" class="btn btn-sm btn-subtle" style="white-space: nowrap;">
+            🔗 Original GitHub Repository
+          </a>
+        </div>
+      </div>
+
       <!-- All Saved Exams Table in Setup -->
       <div class="card" style="margin-top: 1.5rem;">
         <div class="card-header">
@@ -484,14 +500,93 @@
         </div>
       </div>
 
+      <!-- Top N & Bottom N Student Leaderboards -->
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 class="card-title">Top & Bottom Performers Cohort</h2>
+            <p class="card-subtitle">Highlight top-scoring and struggling students for targeted feedback and intervention</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <label style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600;" for="inputTopNCount">Students count (N):</label>
+            <input type="number" id="inputTopNCount" class="form-input" min="1" max="100" value="5" style="width: 70px; padding: 0.25rem 0.5rem; font-weight: 700;">
+            <div style="display: flex; gap: 0.25rem;">
+              <button class="btn btn-sm btn-subtle btn-quick-n" data-n="3">3</button>
+              <button class="btn btn-sm btn-subtle btn-quick-n" data-n="5">5</button>
+              <button class="btn btn-sm btn-subtle btn-quick-n" data-n="10">10</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="leaderboard-grid">
+          <!-- Top N Column -->
+          <div style="background: var(--bg-card-subtle, #f8fafc); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+              <h3 style="font-size: 0.9rem; font-weight: 700; color: var(--pastel-mint-text); display: flex; align-items: center; gap: 0.35rem;">
+                🏆 Top <span class="top-n-display">5</span> Performers
+              </h3>
+              <span class="badge badge-mint" id="topNAvgBadge">Avg: -</span>
+            </div>
+            <div class="table-container" style="max-height: 260px; overflow-y: auto;">
+              <table class="data-table" style="font-size: 0.8rem;">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">Rank</th>
+                    <th>Student Name</th>
+                    <th>ID</th>
+                    <th>Score</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="topNTableBody">
+                  <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">No data</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bottom N Column -->
+          <div style="background: var(--bg-card-subtle, #f8fafc); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+              <h3 style="font-size: 0.9rem; font-weight: 700; color: var(--pastel-rose-text); display: flex; align-items: center; gap: 0.35rem;">
+                📉 Bottom <span class="bottom-n-display">5</span> Performers
+              </h3>
+              <span class="badge badge-rose" id="bottomNAvgBadge">Avg: -</span>
+            </div>
+            <div class="table-container" style="max-height: 260px; overflow-y: auto;">
+              <table class="data-table" style="font-size: 0.8rem;">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">Rank</th>
+                    <th>Student Name</th>
+                    <th>ID</th>
+                    <th>Score</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="bottomNTableBody">
+                  <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">No data</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Score Distribution Histogram & Summary Insights -->
       <div class="card" style="margin-bottom: 1.25rem;">
-        <div class="card-header">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
           <div>
             <h2 class="card-title">Score Distribution & Test Insights</h2>
-            <p class="card-subtitle">Visual frequency distribution of student scores across the cohort</p>
+            <p class="card-subtitle">Dynamic score frequency histogram scaled to exam question count</p>
           </div>
-          <div id="analyticsInsightsBadges" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <div style="display: flex; gap: 0.25rem; align-items: center;">
+              <button class="btn btn-sm btn-primary btn-hist-mode" id="btnHistModePoints" data-mode="points">Points (0 - <span id="histMaxPointsLabel">75</span> pts)</button>
+              <button class="btn btn-sm btn-subtle btn-hist-mode" id="btnHistModePercent" data-mode="percent">Percentage (0 - 100%)</button>
+            </div>
+            <div id="analyticsInsightsBadges" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+          </div>
         </div>
 
         <div id="scoreHistogramContainer" style="padding: 1rem 0; min-height: 180px; display: flex; align-items: flex-end; justify-content: space-between; gap: 0.5rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;">
@@ -662,6 +757,89 @@
       </div>
     </div>
   </div>
+
+  <!-- Manual Override Modal -->
+  <div class="modal-backdrop" id="modalManualOverride" style="z-index: 160; padding: 1rem;">
+    <div class="modal-dialog" style="max-width: 960px; width: 95vw; max-height: 92vh; display: flex; flex-direction: column; padding: 1.25rem;">
+      <div class="card-header" style="margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color);">
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <h3 class="card-title" id="overrideModalTitle">✏️ Manual Scan Override</h3>
+            <span class="badge badge-amber" id="overrideModalBadge" style="display: none;">Overridden</span>
+          </div>
+          <p class="card-subtitle" id="overrideModalSubtitle">Manually correct student name, ID, form code, or individual question answers</p>
+        </div>
+        <button class="btn btn-sm" id="btnCloseOverrideModal">✕</button>
+      </div>
+
+      <!-- Overrides Form (Name, ID, Form Code) -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem; background: var(--bg-card-subtle, #f8fafc); padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="overrideStudentName" style="font-size: 0.78rem;">Student Name</label>
+          <input type="text" id="overrideStudentName" class="form-input" placeholder="e.g. Doe, John" style="font-size: 0.85rem; padding: 0.35rem 0.6rem;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="overrideStudentId" style="font-size: 0.78rem;">Student ID</label>
+          <input type="text" id="overrideStudentId" class="form-input" placeholder="e.g. 10045678" style="font-size: 0.85rem; padding: 0.35rem 0.6rem;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="overrideFormCode" style="font-size: 0.78rem;">Test Form Code</label>
+          <select id="overrideFormCode" class="form-select" style="font-size: 0.85rem; padding: 0.35rem 0.6rem;">
+            <option value="A">Form A</option>
+            <option value="B">Form B</option>
+            <option value="C">Form C</option>
+            <option value="D">Form D</option>
+            <option value="*">Default (*)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Realtime Score Recalculation Preview Banner -->
+      <div style="display: flex; justify-content: space-between; align-items: center; background: var(--primary-subtle); border: 1px solid var(--primary-border); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); margin-bottom: 0.75rem;">
+        <span style="font-size: 0.8rem; font-weight: 600; color: var(--primary-text);">
+          Live Recalculated Score Preview:
+        </span>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <span class="badge badge-mint" id="overrideLiveScoreBadge" style="font-size: 0.85rem; font-weight: 700;">0.0%</span>
+          <span class="badge badge-sky" id="overrideLivePointsBadge">0 / 0 pts</span>
+        </div>
+      </div>
+
+      <!-- Per-Item Question Answers Editor Grid -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+        <h4 style="font-size: 0.85rem; font-weight: 600;">Per-Item Question Answers (<span id="overrideQuestionsCountLabel">75</span> Questions)</h4>
+        <span style="font-size: 0.75rem; color: var(--text-secondary);">Click any option button (A..E) or Blank (—) to override answer</span>
+      </div>
+      <div class="override-grid-container" id="overrideQuestionsGrid">
+        <!-- Generated dynamically -->
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 0.5rem;">
+        <button class="btn btn-sm btn-subtle" id="btnResetToOriginalScan" style="color: var(--pastel-rose-text);">
+          ↺ Revert to Scanned OMR Values
+        </button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-subtle btn-sm" id="btnCancelOverrideModal">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="btnSaveOverrideModal">💾 Save & Apply Overrides</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Footer Attribution -->
+  <footer class="app-footer">
+    <div class="footer-container" style="max-width: 1200px; margin: 0 auto;">
+      <p style="margin-bottom: 0.35rem;">
+        <strong>OpenMCR Web</strong> &bull; Free & Open-Source Optical Mark Recognition Exam Scorer
+      </p>
+      <p style="color: var(--text-muted); font-size: 0.775rem;">
+        Originally created as an independent study project by <strong>Ian Sanders</strong> at the University of South Florida under the direction of <strong>Dr. Autar Kaw</strong>.
+        &bull; <a href="https://github.com/iansan5653/open-mcr" target="_blank" rel="noopener">Original OpenMCR Repository</a>
+        &bull; Open Source under GPL v3 License
+      </p>
+    </div>
+  </footer>
 
   <!-- Main ES6 Entry Point -->
   <script type="module" src="js/app.js?v=20260814_2345"></script>

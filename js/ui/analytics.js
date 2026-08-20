@@ -30,8 +30,82 @@ export function initAnalytics(app) {
   const countPillMastered = document.getElementById('countPillMastered');
   const filterPillsContainer = document.getElementById('heatmapFilterPills');
 
+  // Top N / Bottom N Elements
+  const inputTopNCount = document.getElementById('inputTopNCount');
+  const topNTableBody = document.getElementById('topNTableBody');
+  const bottomNTableBody = document.getElementById('bottomNTableBody');
+  const topNAvgBadge = document.getElementById('topNAvgBadge');
+  const bottomNAvgBadge = document.getElementById('bottomNAvgBadge');
+  const histMaxPointsLabel = document.getElementById('histMaxPointsLabel');
+  const btnHistModePoints = document.getElementById('btnHistModePoints');
+  const btnHistModePercent = document.getElementById('btnHistModePercent');
+
   let activeFilter = 'all';
   let cachedQuestionStats = [];
+  let topNCount = parseInt(localStorage.getItem('openmcr_analytics_top_n') || '5', 10);
+  if (isNaN(topNCount) || topNCount < 1) topNCount = 5;
+  if (inputTopNCount) inputTopNCount.value = topNCount;
+
+  let histMode = localStorage.getItem('openmcr_hist_mode') || 'points';
+
+  function updateHistModeButtons() {
+    if (btnHistModePoints && btnHistModePercent) {
+      if (histMode === 'points') {
+        btnHistModePoints.classList.add('btn-primary');
+        btnHistModePoints.classList.remove('btn-subtle');
+        btnHistModePercent.classList.remove('btn-primary');
+        btnHistModePercent.classList.add('btn-subtle');
+      } else {
+        btnHistModePercent.classList.add('btn-primary');
+        btnHistModePercent.classList.remove('btn-subtle');
+        btnHistModePoints.classList.remove('btn-primary');
+        btnHistModePoints.classList.add('btn-subtle');
+      }
+    }
+  }
+
+  if (btnHistModePoints) {
+    btnHistModePoints.addEventListener('click', () => {
+      histMode = 'points';
+      localStorage.setItem('openmcr_hist_mode', 'points');
+      updateHistModeButtons();
+      renderAnalytics();
+    });
+  }
+
+  if (btnHistModePercent) {
+    btnHistModePercent.addEventListener('click', () => {
+      histMode = 'percent';
+      localStorage.setItem('openmcr_hist_mode', 'percent');
+      updateHistModeButtons();
+      renderAnalytics();
+    });
+  }
+
+  updateHistModeButtons();
+
+  if (inputTopNCount) {
+    inputTopNCount.addEventListener('input', () => {
+      const val = parseInt(inputTopNCount.value, 10);
+      if (!isNaN(val) && val >= 1) {
+        topNCount = val;
+        localStorage.setItem('openmcr_analytics_top_n', String(topNCount));
+        renderAnalytics();
+      }
+    });
+  }
+
+  document.querySelectorAll('.btn-quick-n').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const n = parseInt(btn.dataset.n, 10);
+      if (!isNaN(n) && n >= 1) {
+        topNCount = n;
+        if (inputTopNCount) inputTopNCount.value = topNCount;
+        localStorage.setItem('openmcr_analytics_top_n', String(topNCount));
+        renderAnalytics();
+      }
+    });
+  });
 
   // Bind Filter Pills
   if (filterPillsContainer) {
@@ -81,6 +155,7 @@ export function initAnalytics(app) {
       if (itemTableBody) {
         itemTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No exam data available.</td></tr>`;
       }
+      renderLeaderboards([], numQ);
       cachedQuestionStats = [];
       updatePillCounts();
       return;
@@ -242,44 +317,182 @@ export function initAnalytics(app) {
     }
     if (statKR20) statKR20.textContent = kr20.toFixed(2);
 
-    // 4. Render Visual Score Distribution Histogram
-    renderScoreHistogram(scores, meanScore, medianScore);
+    // 4. Render Top N & Bottom N Student Leaderboards
+    renderLeaderboards(validSubs, numQ);
 
-    // 5. Render Key Insights Summary Badges
+    // 5. Render Visual Dynamic Score Distribution Histogram
+    renderScoreHistogram(scores, rawPoints, numQ, meanScore, medianScore);
+
+    // 6. Render Key Insights Summary Badges
     renderInsightsBadges(questionStats, kr20, meanScore);
 
-    // 6. Update Filter Pill Counts
+    // 7. Update Filter Pill Counts
     updatePillCounts();
 
-    // 7. Render Heatmap Matrix Grid
+    // 8. Render Heatmap Matrix Grid
     renderHeatmapGrid();
 
-    // 8. Render Item Analysis Table
+    // 9. Render Item Analysis Table
     renderItemTable();
   }
 
-  function renderScoreHistogram(scores, meanScore, medianScore) {
+  function renderLeaderboards(validSubs, numQ) {
+    const effectiveN = Math.min(topNCount, validSubs.length);
+    document.querySelectorAll('.top-n-display').forEach(el => el.textContent = effectiveN);
+    document.querySelectorAll('.bottom-n-display').forEach(el => el.textContent = effectiveN);
+
+    // 1. Render Top N Table (Descending)
+    if (topNTableBody) {
+      topNTableBody.innerHTML = '';
+      const topSubs = [...validSubs].sort((a, b) => {
+        const diff = (b.score || 0) - (a.score || 0);
+        if (diff !== 0) return diff;
+        return (b.points || 0) - (a.points || 0);
+      }).slice(0, topNCount);
+
+      if (topSubs.length === 0) {
+        topNTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">No data available</td></tr>`;
+      } else {
+        const topAvg = topSubs.reduce((acc, s) => acc + (s.score || 0), 0) / topSubs.length;
+        if (topNAvgBadge) topNAvgBadge.textContent = `Avg: ${topAvg.toFixed(1)}%`;
+
+        topSubs.forEach((sub, idx) => {
+          const rankNum = idx + 1;
+          let rankHtml = `<span class="rank-badge rank-other">${rankNum}</span>`;
+          if (rankNum === 1) rankHtml = `<span class="rank-badge rank-1" title="1st Place">🥇</span>`;
+          else if (rankNum === 2) rankHtml = `<span class="rank-badge rank-2" title="2nd Place">🥈</span>`;
+          else if (rankNum === 3) rankHtml = `<span class="rank-badge rank-3" title="3rd Place">🥉</span>`;
+
+          const pts = sub.points !== undefined ? sub.points : Math.round(((sub.score || 0) / 100) * numQ);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${rankHtml}</td>
+            <td>
+              <strong>${sub.studentName || 'Student'}</strong>
+              ${sub.isOverridden ? '<span class="badge badge-amber" style="font-size: 0.65rem; margin-left: 0.2rem;">✏️</span>' : ''}
+            </td>
+            <td><code>${sub.studentId || '-'}</code></td>
+            <td>
+              <span class="badge badge-mint" style="font-weight: 700;">${sub.score}%</span>
+              <span style="font-size: 0.72rem; color: var(--text-secondary); margin-left: 0.25rem;">(${pts}/${numQ})</span>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-subtle btn-view-top" data-id="${sub.id}">🖼️ View</button>
+            </td>
+          `;
+
+          tr.querySelector('.btn-view-top').addEventListener('click', () => {
+            if (app.ui.sheetViewer) app.ui.sheetViewer.openFullscreenViewer(sub.id);
+          });
+          topNTableBody.appendChild(tr);
+        });
+      }
+    }
+
+    // 2. Render Bottom N Table (Ascending)
+    if (bottomNTableBody) {
+      bottomNTableBody.innerHTML = '';
+      const bottomSubs = [...validSubs].sort((a, b) => {
+        const diff = (a.score || 0) - (b.score || 0);
+        if (diff !== 0) return diff;
+        return (a.points || 0) - (b.points || 0);
+      }).slice(0, topNCount);
+
+      if (bottomSubs.length === 0) {
+        bottomNTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">No data available</td></tr>`;
+      } else {
+        const bottomAvg = bottomSubs.reduce((acc, s) => acc + (s.score || 0), 0) / bottomSubs.length;
+        if (bottomNAvgBadge) bottomNAvgBadge.textContent = `Avg: ${bottomAvg.toFixed(1)}%`;
+
+        bottomSubs.forEach((sub, idx) => {
+          const rankNum = idx + 1;
+          const rankHtml = `<span class="rank-badge rank-other" style="color: var(--pastel-rose-text); border-color: var(--pastel-rose-border);">${rankNum}</span>`;
+
+          const pts = sub.points !== undefined ? sub.points : Math.round(((sub.score || 0) / 100) * numQ);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${rankHtml}</td>
+            <td>
+              <strong>${sub.studentName || 'Student'}</strong>
+              ${sub.isOverridden ? '<span class="badge badge-amber" style="font-size: 0.65rem; margin-left: 0.2rem;">✏️</span>' : ''}
+            </td>
+            <td><code>${sub.studentId || '-'}</code></td>
+            <td>
+              <span class="badge ${(sub.score >= 50) ? 'badge-sky' : 'badge-rose'}" style="font-weight: 700;">${sub.score}%</span>
+              <span style="font-size: 0.72rem; color: var(--text-secondary); margin-left: 0.25rem;">(${pts}/${numQ})</span>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-subtle btn-view-bottom" data-id="${sub.id}">🖼️ View</button>
+            </td>
+          `;
+
+          tr.querySelector('.btn-view-bottom').addEventListener('click', () => {
+            if (app.ui.sheetViewer) app.ui.sheetViewer.openFullscreenViewer(sub.id);
+          });
+          bottomNTableBody.appendChild(tr);
+        });
+      }
+    }
+  }
+
+  function renderScoreHistogram(scores, rawPoints, numQ, meanScore, medianScore) {
     if (!scoreHistContainer) return;
     scoreHistContainer.innerHTML = '';
 
-    const brackets = [
-      { label: '0-9%', min: 0, max: 9.99, count: 0 },
-      { label: '10-19%', min: 10, max: 19.99, count: 0 },
-      { label: '20-29%', min: 20, max: 29.99, count: 0 },
-      { label: '30-39%', min: 30, max: 39.99, count: 0 },
-      { label: '40-49%', min: 40, max: 49.99, count: 0 },
-      { label: '50-59%', min: 50, max: 59.99, count: 0 },
-      { label: '60-69%', min: 60, max: 69.99, count: 0 },
-      { label: '70-79%', min: 70, max: 79.99, count: 0 },
-      { label: '80-89%', min: 80, max: 89.99, count: 0 },
-      { label: '90-100%', min: 90, max: 100, count: 0 }
-    ];
+    if (histMaxPointsLabel) {
+      histMaxPointsLabel.textContent = numQ;
+    }
 
-    scores.forEach(s => {
-      const b = brackets.find(b => s >= b.min && s <= b.max) || brackets[brackets.length - 1];
-      b.count++;
-    });
+    let brackets = [];
 
+    if (histMode === 'points') {
+      // Dynamic point-based bins capped precisely at numQ (e.g. 60 items -> bins up to 60 only)
+      let step = 10;
+      if (numQ <= 15) step = 3;
+      else if (numQ <= 30) step = 5;
+      else if (numQ <= 60) step = 10;
+      else if (numQ <= 100) step = 10;
+      else step = 20;
+
+      let start = 0;
+      while (start < numQ) {
+        const end = Math.min(numQ, start + step);
+        const label = start === 0 ? `0-${end}` : `${start + 1}-${end}`;
+        brackets.push({
+          label: `${label} pts`,
+          min: start === 0 ? 0 : start + 0.001,
+          max: end,
+          count: 0
+        });
+        start = end;
+      }
+
+      rawPoints.forEach(pt => {
+        const b = brackets.find(b => pt >= b.min && pt <= b.max) || brackets[brackets.length - 1];
+        if (b) b.count++;
+      });
+    } else {
+      // Percentage distribution (0-100%)
+      brackets = [
+        { label: '0-9%', min: 0, max: 9.99, count: 0 },
+        { label: '10-19%', min: 10, max: 19.99, count: 0 },
+        { label: '20-29%', min: 20, max: 29.99, count: 0 },
+        { label: '30-39%', min: 30, max: 39.99, count: 0 },
+        { label: '40-49%', min: 40, max: 49.99, count: 0 },
+        { label: '50-59%', min: 50, max: 59.99, count: 0 },
+        { label: '60-69%', min: 60, max: 69.99, count: 0 },
+        { label: '70-79%', min: 70, max: 79.99, count: 0 },
+        { label: '80-89%', min: 80, max: 89.99, count: 0 },
+        { label: '90-100%', min: 90, max: 100, count: 0 }
+      ];
+
+      scores.forEach(s => {
+        const b = brackets.find(b => s >= b.min && s <= b.max) || brackets[brackets.length - 1];
+        if (b) b.count++;
+      });
+    }
+
+    const totalStudents = scores.length;
     const maxCount = Math.max(1, ...brackets.map(b => b.count));
 
     brackets.forEach(b => {
@@ -287,15 +500,16 @@ export function initAnalytics(app) {
       const col = document.createElement('div');
       col.className = 'hist-col';
       
+      const midpointPct = (b.min / (histMode === 'points' ? numQ : 100)) * 100;
       let barColor = '#64748b';
-      if (b.min >= 70) barColor = '#10b981';
-      else if (b.min >= 50) barColor = '#0ea5e9';
-      else if (b.min >= 30) barColor = '#f59e0b';
+      if (midpointPct >= 70) barColor = '#10b981';
+      else if (midpointPct >= 50) barColor = '#0ea5e9';
+      else if (midpointPct >= 30) barColor = '#f59e0b';
       else barColor = '#ef4444';
 
       col.innerHTML = `
         <span class="hist-count">${b.count > 0 ? b.count : ''}</span>
-        <div class="hist-bar-outer" title="${b.label}: ${b.count} student(s) (${Math.round((b.count / scores.length) * 100)}%)">
+        <div class="hist-bar-outer" title="${b.label}: ${b.count} student(s) (${Math.round((b.count / totalStudents) * 100)}%)">
           <div class="hist-bar-inner" style="height: ${pctHeight}%; background-color: ${barColor};"></div>
         </div>
         <span class="hist-label">${b.label}</span>

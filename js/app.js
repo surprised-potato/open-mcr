@@ -11,6 +11,7 @@ import { initResultsTable } from './ui/resultsTable.js';
 import { initAnalytics } from './ui/analytics.js';
 import { initFirebaseModal } from './ui/firebaseModal.js';
 import { initSheetViewer } from './ui/sheetViewer.js';
+import { initOverrideModal } from './ui/overrideModal.js';
 import {
   saveExamsToDB,
   loadExamsFromDB,
@@ -291,6 +292,7 @@ class OpenMCRApp {
     this.ui.analytics = initAnalytics(this);
     this.ui.firebaseModal = initFirebaseModal(this);
     this.ui.sheetViewer = initSheetViewer(this);
+    this.ui.overrideModal = initOverrideModal(this);
 
     // 5. Restore Exams & Submissions from IndexedDB
     try {
@@ -604,6 +606,66 @@ class OpenMCRApp {
   openInspectorForSubmission(submissionId) {
     this.state.selectedScanId = submissionId;
     this.switchTab('inspector');
+  }
+
+  openOverrideModal(submissionId) {
+    if (this.ui.overrideModal) {
+      this.ui.overrideModal.openOverrideModal(submissionId);
+    }
+  }
+
+  applySubmissionOverride(subId, overrides) {
+    const sub = this.state.submissions.find(s => s.id === subId);
+    if (!sub) return;
+
+    // Cache original detected values before first override
+    if (sub.detectedStudentName === undefined) sub.detectedStudentName = sub.studentName;
+    if (sub.detectedStudentId === undefined) sub.detectedStudentId = sub.studentId;
+    if (sub.detectedFormCode === undefined) sub.detectedFormCode = sub.testFormCode;
+    if (!sub.detectedAnswers && sub.answers) {
+      sub.detectedAnswers = Array.isArray(sub.answers) ? [...sub.answers] : [];
+    }
+
+    if (overrides.studentName !== undefined) sub.studentName = overrides.studentName;
+    if (overrides.studentId !== undefined) sub.studentId = overrides.studentId;
+    if (overrides.testFormCode !== undefined) sub.testFormCode = overrides.testFormCode;
+    if (overrides.answers !== undefined) sub.answers = [...overrides.answers];
+
+    sub.isOverridden = true;
+    delete sub.error; // Clear error on manual override
+
+    const scored = this.scoreExtractedData(sub);
+    sub.score = scored.percentage;
+    sub.points = scored.points;
+    sub.totalQuestions = scored.totalQuestions;
+    sub.scoredStatus = scored.scored;
+    delete sub.scoredError;
+
+    saveSingleSubmissionToDB(sub);
+    this.saveState();
+    this.renderAll();
+  }
+
+  resetSubmissionOverride(subId) {
+    const sub = this.state.submissions.find(s => s.id === subId);
+    if (!sub) return;
+
+    if (sub.detectedStudentName !== undefined) sub.studentName = sub.detectedStudentName;
+    if (sub.detectedStudentId !== undefined) sub.studentId = sub.detectedStudentId;
+    if (sub.detectedFormCode !== undefined) sub.testFormCode = sub.detectedFormCode;
+    if (sub.detectedAnswers) sub.answers = [...sub.detectedAnswers];
+
+    sub.isOverridden = false;
+
+    const scored = this.scoreExtractedData(sub);
+    sub.score = scored.percentage;
+    sub.points = scored.points;
+    sub.totalQuestions = scored.totalQuestions;
+    sub.scoredStatus = scored.scored;
+
+    saveSingleSubmissionToDB(sub);
+    this.saveState();
+    this.renderAll();
   }
 
   deleteSubmission(id) {

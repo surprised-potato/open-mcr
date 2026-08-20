@@ -55,20 +55,32 @@ export function initResultsTable(app) {
         ? `<span class="badge badge-mint">${sub.score}%</span>`
         : `<span class="badge badge-rose">${sub.score}%</span>`;
 
+      if (sub.isOverridden) {
+        tr.className = 'row-overridden';
+      }
+
       tr.innerHTML = `
         <td><strong><code>${sub.studentId || '-'}</code></strong></td>
-        <td>${sub.studentName || '-'}</td>
+        <td>
+          ${sub.studentName || '-'}
+          ${sub.isOverridden ? '<span class="badge badge-amber" style="margin-left: 0.25rem; font-size: 0.7rem;">✏️ Overridden</span>' : ''}
+        </td>
         <td><span class="badge badge-slate">${sub.testFormCode || '-'}</span></td>
         <td>${isErr ? '—' : `${sub.points !== undefined ? sub.points : 0} / ${totalQ}`}</td>
         <td>${scoreBadge}</td>
         <td><code>${sub.threshold ? (sub.threshold * 100).toFixed(1) + '%' : '-'}</code></td>
         <td>
-          <div style="display: flex; gap: 0.35rem;">
+          <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-subtle btn-override-row" data-id="${sub.id}" title="Edit / Override student data or answers">✏️ Override</button>
             <button class="btn btn-sm btn-primary btn-view-row" data-id="${sub.id}">🖼️ View</button>
             <button class="btn btn-sm btn-subtle btn-inspect-row" data-id="${sub.id}">📍 Inspect</button>
           </div>
         </td>
       `;
+
+      tr.querySelector('.btn-override-row').addEventListener('click', () => {
+        app.openOverrideModal(sub.id);
+      });
 
       tr.querySelector('.btn-view-row').addEventListener('click', () => {
         if (app.ui.sheetViewer) app.ui.sheetViewer.openFullscreenViewer(sub.id);

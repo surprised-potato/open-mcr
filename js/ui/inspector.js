@@ -156,8 +156,21 @@ export function initInspector(app) {
     }
 
     // Update Sidebar details
-    studentNameEl.textContent = sub.studentName || (sub.error ? 'Failed to read sheet' : 'Unknown Student');
-    studentDetailsEl.textContent = `ID: ${sub.studentId || '-'} • Form: ${sub.testFormCode || '-'} • File: ${sub.filename}`;
+    studentNameEl.innerHTML = `
+      ${sub.studentName || (sub.error ? 'Failed to read sheet' : 'Unknown Student')}
+      ${sub.isOverridden ? '<span class="badge badge-amber" style="margin-left: 0.35rem; font-size: 0.7rem;">✏️ Overridden</span>' : ''}
+    `;
+    studentDetailsEl.innerHTML = `
+      ID: ${sub.studentId || '-'} • Form: ${sub.testFormCode || '-'} • File: ${sub.filename}
+      <button class="btn btn-sm btn-subtle" id="btnInspectorOverrideSub" style="margin-left: 0.5rem; padding: 0.15rem 0.45rem; font-size: 0.72rem;">✏️ Edit / Override</button>
+    `;
+    
+    const btnOverride = document.getElementById('btnInspectorOverrideSub');
+    if (btnOverride) {
+      btnOverride.addEventListener('click', () => {
+        app.openOverrideModal(sub.id);
+      });
+    }
     
     // Render Question Sidebar Breakdown
     const scored = app.scoreExtractedData(sub);

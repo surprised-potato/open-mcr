@@ -141,8 +141,9 @@ export function initSheetViewer(app) {
           <div style="position: absolute; top: 0.5rem; right: 0.5rem;">
             <span class="badge ${scoreBadgeClass}">${scoreText}</span>
           </div>
-          <div style="position: absolute; bottom: 0.5rem; left: 0.5rem; display: flex; gap: 0.25rem;">
+          <div style="position: absolute; bottom: 0.5rem; left: 0.5rem; display: flex; gap: 0.25rem; flex-wrap: wrap;">
             <span class="badge badge-slate">Form ${sub.testFormCode || '-'}</span>
+            ${sub.isOverridden ? '<span class="badge badge-amber" style="font-size: 0.7rem;">✏️ Overridden</span>' : ''}
             ${isViewingAll ? `<span class="badge badge-sky" style="font-size: 0.7rem;">${examName}</span>` : ''}
           </div>
           <div class="thumb-hover-overlay" style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease;">
@@ -155,8 +156,9 @@ export function initSheetViewer(app) {
             <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.15rem 0 0 0;">ID: <code>${sub.studentId || '-'}</code> • ${sub.filename}</p>
           </div>
         </div>
-        <div style="display: flex; gap: 0.35rem; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
+        <div style="display: flex; gap: 0.35rem; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border-color); flex-wrap: wrap;">
           <button class="btn btn-sm btn-primary btn-open-viewer" style="flex: 1;">🔍 Viewer</button>
+          <button class="btn btn-sm btn-subtle btn-override-card" title="Manually override scan answers/info">✏️</button>
           <button class="btn btn-sm btn-subtle btn-inspect" title="Inspect & Edit Corners">📍</button>
           <button class="btn btn-sm btn-subtle btn-delete-sub" style="color: var(--pastel-rose-text);" title="Delete Sheet">🗑️</button>
         </div>
@@ -168,6 +170,9 @@ export function initSheetViewer(app) {
       });
       card.querySelector('.btn-open-viewer').addEventListener('click', () => {
         openFullscreenViewer(sub.id);
+      });
+      card.querySelector('.btn-override-card').addEventListener('click', () => {
+        app.openOverrideModal(sub.id);
       });
       card.querySelector('.btn-inspect').addEventListener('click', () => {
         app.openInspectorForSubmission(sub.id);

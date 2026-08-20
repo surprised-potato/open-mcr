@@ -196,6 +196,11 @@ export function initScanner(app) {
           testFormCode: scanResult.testFormCode || 'A',
           courseId: scanResult.courseId || activeExam.courseId || '',
           answers: scanResult.answers,
+          detectedStudentId: scanResult.studentId || 'Unknown',
+          detectedStudentName: scanResult.studentName || 'Unknown',
+          detectedFormCode: scanResult.testFormCode || 'A',
+          detectedAnswers: scanResult.answers ? [...scanResult.answers] : [],
+          isOverridden: false,
           threshold: scanResult.threshold,
           score: scored.percentage,
           points: scored.points,
@@ -363,32 +368,48 @@ export function initScanner(app) {
     scansTableBody.innerHTML = '';
     list.forEach((sub, idx) => {
       const tr = document.createElement('tr');
+      if (sub.isOverridden) {
+        tr.className = 'row-overridden';
+      }
 
       const isErr = Boolean(sub.error);
       const scoreBadge = isErr
         ? `<span class="badge badge-rose">Error</span>`
         : `<span class="badge badge-mint">${sub.score}%</span>`;
-      const statusBadge = isErr
+      
+      let statusBadge = isErr
         ? `<span class="badge badge-rose">${sub.error}</span>`
         : `<span class="badge badge-sky">Graded</span>`;
+      
+      if (sub.isOverridden) {
+        statusBadge += ` <span class="badge badge-amber" title="Manual scan overrides applied">✏️ Overridden</span>`;
+      }
 
       const totalQ = sub.totalQuestions || (app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : (sub.answers ? sub.answers.length : 75));
       tr.innerHTML = `
-        <td><strong>${sub.filename}</strong></td>
+        <td>
+          <strong>${sub.filename}</strong>
+          ${sub.isOverridden ? '<div style="font-size: 0.7rem; color: var(--pastel-amber-text); font-weight: 600;">(Manual Overrides)</div>' : ''}
+        </td>
         <td><code>${sub.studentId || '-'}</code></td>
         <td>${sub.studentName || '-'}</td>
-        <td>${sub.testFormCode || '-'}</td>
+        <td><span class="badge badge-slate">${sub.testFormCode || '-'}</span></td>
         <td>${scoreBadge}</td>
         <td>${isErr ? '-' : `${sub.points !== undefined ? sub.points : 0} / ${totalQ}`}</td>
         <td>${statusBadge}</td>
         <td>
-          <div style="display: flex; gap: 0.35rem; align-items: center;">
+          <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-subtle btn-override-sub" data-id="${sub.id}" title="Manually edit student info or answers">✏️ Override</button>
             <button class="btn btn-sm btn-primary btn-view-sub" data-id="${sub.id}">🖼️ View</button>
             <button class="btn btn-sm btn-subtle btn-inspect-sub" data-id="${sub.id}">📍 Inspect</button>
-            <button class="btn btn-sm btn-subtle btn-delete-sub" data-id="${sub.id}" style="color: var(--pastel-rose-text);" title="Delete sheet">🗑️ Delete</button>
+            <button class="btn btn-sm btn-subtle btn-delete-sub" data-id="${sub.id}" style="color: var(--pastel-rose-text);" title="Delete sheet">🗑️</button>
           </div>
         </td>
       `;
+
+      tr.querySelector('.btn-override-sub').addEventListener('click', () => {
+        app.openOverrideModal(sub.id);
+      });
 
       tr.querySelector('.btn-view-sub').addEventListener('click', () => {
         if (app.ui.sheetViewer) app.ui.sheetViewer.openFullscreenViewer(sub.id);
