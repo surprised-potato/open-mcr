@@ -22,6 +22,22 @@ export function initAnalytics(app) {
   const searchInput = document.getElementById('inputSearchItemAnalysis');
   const btnExportCsv = document.getElementById('btnExportItemAnalysisCsv');
 
+  // Form Filter Elements
+  const selectAnalyticsForm = document.getElementById('selectAnalyticsForm');
+  const analyticsFormPills = document.getElementById('analyticsFormPills');
+  const analyticsActiveFormBadge = document.getElementById('analyticsActiveFormBadge');
+  const analyticsFormSheetCountBadge = document.getElementById('analyticsFormSheetCountBadge');
+
+  let selectedFormCode = localStorage.getItem('openmcr_analytics_form_code') || 'all';
+
+  if (selectAnalyticsForm) {
+    selectAnalyticsForm.addEventListener('change', (e) => {
+      selectedFormCode = e.target.value;
+      localStorage.setItem('openmcr_analytics_form_code', selectedFormCode);
+      renderAnalytics();
+    });
+  }
+
   // Filter Pill Counts
   const countPillAll = document.getElementById('countPillAll');
   const countPillFlagged = document.getElementById('countPillFlagged');
@@ -130,10 +146,81 @@ export function initAnalytics(app) {
     btnExportCsv.addEventListener('click', exportItemAnalysisToCsv);
   }
 
+  function renderFormControls(activeExam, allSubs) {
+    const formCounts = new Map();
+    allSubs.forEach(s => {
+      const f = (s.testFormCode || 'A').trim().toUpperCase();
+      formCounts.set(f, (formCounts.get(f) || 0) + 1);
+    });
+
+    const keyForms = Object.keys(activeExam.answerKeys || {}).map(k => k.trim().toUpperCase());
+    const distinctForms = Array.from(new Set(['A', ...keyForms, ...formCounts.keys()])).filter(f => f && f !== '*').sort();
+
+    // Populate Select Options
+    if (selectAnalyticsForm) {
+      selectAnalyticsForm.innerHTML = '';
+      
+      const allOpt = document.createElement('option');
+      allOpt.value = 'all';
+      allOpt.textContent = `All Forms Combined (${allSubs.length})`;
+      if (selectedFormCode === 'all') allOpt.selected = true;
+      selectAnalyticsForm.appendChild(allOpt);
+
+      distinctForms.forEach(f => {
+        const count = formCounts.get(f) || 0;
+        const opt = document.createElement('option');
+        opt.value = f;
+        opt.textContent = `Form ${f} (${count} student${count === 1 ? '' : 's'})`;
+        if (selectedFormCode === f) opt.selected = true;
+        selectAnalyticsForm.appendChild(opt);
+      });
+    }
+
+    // Populate Quick Form Pills
+    if (analyticsFormPills) {
+      analyticsFormPills.innerHTML = '';
+
+      const createPill = (code, label, count) => {
+        const btn = document.createElement('button');
+        const isActive = (selectedFormCode === code);
+        btn.className = `btn btn-sm ${isActive ? 'btn-primary' : 'btn-subtle'}`;
+        btn.style.fontSize = '0.75rem';
+        btn.style.padding = '0.2rem 0.5rem';
+        btn.innerHTML = `${label} <span style="opacity: 0.8; font-size: 0.7rem;">(${count})</span>`;
+        btn.addEventListener('click', () => {
+          selectedFormCode = code;
+          localStorage.setItem('openmcr_analytics_form_code', selectedFormCode);
+          if (selectAnalyticsForm) selectAnalyticsForm.value = code;
+          renderAnalytics();
+        });
+        return btn;
+      };
+
+      analyticsFormPills.appendChild(createPill('all', 'All Forms', allSubs.length));
+      distinctForms.forEach(f => {
+        analyticsFormPills.appendChild(createPill(f, `Form ${f}`, formCounts.get(f) || 0));
+      });
+    }
+  }
+
   function renderAnalytics() {
     const activeExam = app.getActiveExam();
-    const validSubs = app.getActiveSubmissions().filter(s => !s.error && s.score !== undefined);
+    const allValidSubs = app.getActiveSubmissions().filter(s => !s.error && s.score !== undefined);
     const numQ = app.getActiveExamNumQuestions ? app.getActiveExamNumQuestions() : (activeExam.variant === '150' ? 150 : 75);
+
+    renderFormControls(activeExam, allValidSubs);
+
+    let validSubs = allValidSubs;
+    if (selectedFormCode !== 'all') {
+      validSubs = allValidSubs.filter(s => (s.testFormCode || 'A').trim().toUpperCase() === selectedFormCode.trim().toUpperCase());
+    }
+
+    if (analyticsActiveFormBadge) {
+      analyticsActiveFormBadge.textContent = selectedFormCode === 'all' ? 'All Forms Combined' : `Form ${selectedFormCode}`;
+    }
+    if (analyticsFormSheetCountBadge) {
+      analyticsFormSheetCountBadge.textContent = `${validSubs.length} Student${validSubs.length === 1 ? '' : 's'}`;
+    }
 
     if (statTotalGraded) statTotalGraded.textContent = validSubs.length;
 
@@ -145,15 +232,15 @@ export function initAnalytics(app) {
       if (statKR20) statKR20.textContent = '0.00';
 
       if (scoreHistContainer) {
-        scoreHistContainer.innerHTML = `<p style="width: 100%; text-align: center; color: var(--text-muted); padding: 2rem;">No graded scores available for "${activeExam.name}". Scan sheets to view analytics.</p>`;
+        scoreHistContainer.innerHTML = `<p style="width: 100%; text-align: center; color: var(--text-muted); padding: 2rem;">No graded scores available for "${activeExam.name}"${selectedFormCode !== 'all' ? ` (Form ${selectedFormCode})` : ''}.</p>`;
       }
       if (insightsBadges) insightsBadges.innerHTML = '';
       if (keyInsightsGrid) keyInsightsGrid.innerHTML = '';
       if (heatmapGrid) {
-        heatmapGrid.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 1.5rem;">Scan sheets to populate question heatmap matrix.</p>`;
+        heatmapGrid.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 1.5rem;">Scan sheets to populate question heatmap matrix for ${selectedFormCode !== 'all' ? `Form ${selectedFormCode}` : 'active exam'}.</p>`;
       }
       if (itemTableBody) {
-        itemTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No exam data available.</td></tr>`;
+        itemTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No exam data available for ${selectedFormCode !== 'all' ? `Form ${selectedFormCode}` : 'active exam'}.</td></tr>`;
       }
       renderLeaderboards([], numQ);
       cachedQuestionStats = [];
@@ -188,7 +275,9 @@ export function initAnalytics(app) {
     if (statMedian) statMedian.textContent = `${medianScore.toFixed(1)}%`;
 
     // 2. Compute Item-by-Item Psychometrics (Kelly's 27% Rule, Point-Biserial, Distractor Traps)
-    const defaultKey = activeExam.answerKeys['*'] || Object.values(activeExam.answerKeys)[0] || [];
+    const defaultKey = selectedFormCode !== 'all'
+      ? app.getAnswersForForm(selectedFormCode)
+      : (activeExam.answerKeys['*'] || Object.values(activeExam.answerKeys)[0] || []);
     
     // Sort submissions descending by total score to extract upper 27% and lower 27% cohorts
     const sortedSubs = [...validSubs].sort((a, b) => b.score - a.score);
@@ -784,9 +873,8 @@ export function initAnalytics(app) {
     const csvContent = rows.map(r => r.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Item_Analysis_${(activeExam.name || 'Exam').replace(/\s+/g, '_')}_${Date.now()}.csv`);
+    const formSuffix = selectedFormCode === 'all' ? 'AllForms' : `Form_${selectedFormCode}`;
+    link.setAttribute('download', `Item_Analysis_${(activeExam.name || 'Exam').replace(/\s+/g, '_')}_${formSuffix}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

@@ -472,6 +472,27 @@
 
     <!-- 7. ANALYTICS PANE -->
     <section class="tab-pane" id="pane-analytics">
+      <!-- Form Variant / Code Filter Bar -->
+      <div class="analytics-filter-bar" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 1.25rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <label style="font-weight: 700; font-size: 0.875rem; color: var(--text-main); display: flex; align-items: center; gap: 0.35rem;" for="selectAnalyticsForm">
+            📝 Test Form Variant:
+          </label>
+          <select id="selectAnalyticsForm" class="form-select" style="min-width: 170px; font-weight: 600;">
+            <option value="all">All Forms Combined</option>
+            <option value="A">Form A</option>
+            <option value="B">Form B</option>
+            <option value="C">Form C</option>
+            <option value="D">Form D</option>
+          </select>
+          <div id="analyticsFormPills" style="display: flex; gap: 0.35rem; flex-wrap: wrap;"></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span class="badge badge-sky" id="analyticsActiveFormBadge">All Forms</span>
+          <span class="badge badge-mint" id="analyticsFormSheetCountBadge">0 Students</span>
+        </div>
+      </div>
+
       <!-- Stats Overview Cards -->
       <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 1.25rem;">
         <div class="stat-card">
@@ -842,6 +863,6 @@
   </footer>
 
   <!-- Main ES6 Entry Point -->
-  <script type="module" src="js/app.js?v=20260820_1745"></script>
+  <script type="module" src="js/app.js?v=20260820_1755"></script>
 </body>
 </html>
